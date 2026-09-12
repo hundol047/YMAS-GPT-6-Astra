@@ -1,0 +1,1426 @@
+[
+  {
+    "id": "warfarin",
+    "name_ko": "와파린",
+    "cls_ko": "항응고제",
+    "group_ko": "항응고제",
+    "dept": "internal",
+    "openfda_search_term": "WARFARIN"
+  },
+  {
+    "id": "aspirin",
+    "name_ko": "아스피린",
+    "cls_ko": "항혈소판제",
+    "group_ko": "항혈소판제",
+    "dept": "internal",
+    "openfda_search_term": "ASPIRIN"
+  },
+  {
+    "id": "ibuprofen",
+    "name_ko": "이부프로펜",
+    "cls_ko": "NSAID",
+    "group_ko": "NSAID",
+    "dept": "internal",
+    "openfda_search_term": "IBUPROFEN"
+  },
+  {
+    "id": "acetaminophen",
+    "name_ko": "아세트아미노펜",
+    "cls_ko": "비NSAID 진통제",
+    "group_ko": "비NSAID진통제",
+    "dept": "internal",
+    "openfda_search_term": "ACETAMINOPHEN"
+  },
+  {
+    "id": "metformin",
+    "name_ko": "메트포르민",
+    "cls_ko": "당뇨약(비구아니드)",
+    "group_ko": "당뇨약",
+    "dept": "internal",
+    "openfda_search_term": "METFORMIN"
+  },
+  {
+    "id": "losartan",
+    "name_ko": "로사탄",
+    "cls_ko": "ARB(안지오텐신Ⅱ수용체차단제)",
+    "group_ko": "RAS억제제",
+    "dept": "internal",
+    "openfda_search_term": "LOSARTAN"
+  },
+  {
+    "id": "enalapril",
+    "name_ko": "에날라프릴",
+    "cls_ko": "ACE 억제제",
+    "group_ko": "RAS억제제",
+    "dept": "internal",
+    "openfda_search_term": "ENALAPRIL"
+  },
+  {
+    "id": "lisinopril",
+    "name_ko": "리시노프릴",
+    "cls_ko": "ACE 억제제",
+    "group_ko": "RAS억제제",
+    "dept": "internal",
+    "openfda_search_term": "LISINOPRIL"
+  },
+  {
+    "id": "simvastatin",
+    "name_ko": "심바스타틴",
+    "cls_ko": "스타틴",
+    "group_ko": "스타틴",
+    "dept": "internal",
+    "openfda_search_term": "SIMVASTATIN"
+  },
+  {
+    "id": "atorvastatin",
+    "name_ko": "아토르바스타틴",
+    "cls_ko": "스타틴",
+    "group_ko": "스타틴",
+    "dept": "internal",
+    "openfda_search_term": "ATORVASTATIN"
+  },
+  {
+    "id": "clarithromycin",
+    "name_ko": "클래리스로마이신",
+    "cls_ko": "마크로라이드 항생제",
+    "group_ko": "마크로라이드",
+    "dept": "internal",
+    "openfda_search_term": "CLARITHROMYCIN"
+  },
+  {
+    "id": "azithromycin",
+    "name_ko": "아지스로마이신",
+    "cls_ko": "마크로라이드 항생제(대체계열)",
+    "group_ko": "마크로라이드(대체)",
+    "dept": "internal",
+    "openfda_search_term": "AZITHROMYCIN"
+  },
+  {
+    "id": "amoxicillin",
+    "name_ko": "아목시실린",
+    "cls_ko": "페니실린계 항생제",
+    "group_ko": "페니실린",
+    "dept": "internal",
+    "openfda_search_term": "AMOXICILLIN"
+  },
+  {
+    "id": "furosemide",
+    "name_ko": "푸로세미드",
+    "cls_ko": "이뇨제",
+    "group_ko": "이뇨제",
+    "dept": "internal",
+    "openfda_search_term": "FUROSEMIDE"
+  },
+  {
+    "id": "sertraline",
+    "name_ko": "설트랄린",
+    "cls_ko": "SSRI",
+    "group_ko": "SSRI",
+    "dept": "internal",
+    "openfda_search_term": "SERTRALINE"
+  },
+  {
+    "id": "vitamind",
+    "name_ko": "비타민D",
+    "cls_ko": "영양제",
+    "group_ko": "영양제",
+    "dept": "internal",
+    "openfda_search_term": "VITAMIND"
+  },
+  {
+    "id": "fluoxetine",
+    "name_ko": "플루옥세틴",
+    "cls_ko": "SSRI",
+    "group_ko": "SSRI",
+    "dept": "psych",
+    "openfda_search_term": "FLUOXETINE"
+  },
+  {
+    "id": "lithium",
+    "name_ko": "리튬",
+    "cls_ko": "기분조절제",
+    "group_ko": "리튬",
+    "dept": "psych",
+    "openfda_search_term": "LITHIUM"
+  },
+  {
+    "id": "lorazepam",
+    "name_ko": "로라제팜",
+    "cls_ko": "벤조디아제핀",
+    "group_ko": "벤조디아제핀",
+    "dept": "psych",
+    "openfda_search_term": "LORAZEPAM"
+  },
+  {
+    "id": "haloperidol",
+    "name_ko": "할로페리돌",
+    "cls_ko": "항정신병약물(1세대)",
+    "group_ko": "항정신병약물",
+    "dept": "psych",
+    "openfda_search_term": "HALOPERIDOL"
+  },
+  {
+    "id": "amoxiclav",
+    "name_ko": "아목시실린/클라불란산",
+    "cls_ko": "페니실린계 복합항생제",
+    "group_ko": "페니실린",
+    "dept": "peds",
+    "openfda_search_term": "AMOXICILLIN; CLAVULANATE POTASSIUM"
+  },
+  {
+    "id": "albuterol",
+    "name_ko": "살부타몰(흡입)",
+    "cls_ko": "속효성 베타2작용제",
+    "group_ko": "베타2작용제",
+    "dept": "peds",
+    "openfda_search_term": "ALBUTEROL"
+  },
+  {
+    "id": "ondansetron_peds",
+    "name_ko": "온단세트론(소아용)",
+    "cls_ko": "5-HT3 차단제(진토제)",
+    "group_ko": "5-HT3차단제",
+    "dept": "peds",
+    "openfda_search_term": "ONDANSETRON"
+  },
+  {
+    "id": "oxytocin",
+    "name_ko": "옥시토신",
+    "cls_ko": "자궁수축제",
+    "group_ko": "자궁수축제",
+    "dept": "obgyn",
+    "openfda_search_term": "OXYTOCIN"
+  },
+  {
+    "id": "misoprostol",
+    "name_ko": "미소프로스톨",
+    "cls_ko": "프로스타글란딘 유사체",
+    "group_ko": "프로스타글란딘",
+    "dept": "obgyn",
+    "openfda_search_term": "MISOPROSTOL"
+  },
+  {
+    "id": "folicacid",
+    "name_ko": "엽산",
+    "cls_ko": "임신 중 영양제",
+    "group_ko": "영양제",
+    "dept": "obgyn",
+    "openfda_search_term": "FOLICACID"
+  },
+  {
+    "id": "ferroussulfate",
+    "name_ko": "황산제일철(철분제)",
+    "cls_ko": "철분제",
+    "group_ko": "철분제",
+    "dept": "obgyn",
+    "openfda_search_term": "FERROUSSULFATE"
+  },
+  {
+    "id": "celecoxib",
+    "name_ko": "셀레콕시브",
+    "cls_ko": "NSAID(COX-2 억제제)",
+    "group_ko": "NSAID",
+    "dept": "ortho",
+    "openfda_search_term": "CELECOXIB"
+  },
+  {
+    "id": "tramadol",
+    "name_ko": "트라마돌",
+    "cls_ko": "오피오이드 진통제",
+    "group_ko": "오피오이드",
+    "dept": "ortho",
+    "openfda_search_term": "TRAMADOL"
+  },
+  {
+    "id": "cefazolin",
+    "name_ko": "세파졸린",
+    "cls_ko": "세팔로스포린계 항생제",
+    "group_ko": "세팔로스포린",
+    "dept": "ortho",
+    "openfda_search_term": "CEFAZOLIN"
+  },
+  {
+    "id": "ondansetron",
+    "name_ko": "온단세트론",
+    "cls_ko": "5-HT3 차단제(항암 구토 예방)",
+    "group_ko": "5-HT3차단제",
+    "dept": "onco",
+    "openfda_search_term": "ONDANSETRON"
+  },
+  {
+    "id": "cyclophosphamide",
+    "name_ko": "사이클로포스파미드",
+    "cls_ko": "알킬화제(항암제)",
+    "group_ko": "알킬화제",
+    "dept": "onco",
+    "openfda_search_term": "CYCLOPHOSPHAMIDE"
+  },
+  {
+    "id": "filgrastim",
+    "name_ko": "필그라스팀",
+    "cls_ko": "백혈구생성인자(G-CSF)",
+    "group_ko": "성장인자",
+    "dept": "onco",
+    "openfda_search_term": "FILGRASTIM"
+  },
+  {
+    "id": "paclitaxel",
+    "name_ko": "파클리탁셀",
+    "cls_ko": "탁산계 항암제",
+    "group_ko": "탁산계",
+    "dept": "onco",
+    "openfda_search_term": "PACLITAXEL"
+  },
+  {
+    "id": "doxorubicin",
+    "name_ko": "독소루비신",
+    "cls_ko": "안트라사이클린계 항암제",
+    "group_ko": "안트라사이클린계",
+    "dept": "onco",
+    "openfda_search_term": "DOXORUBICIN"
+  },
+  {
+    "id": "tamoxifen",
+    "name_ko": "타목시펜",
+    "cls_ko": "호르몬 항암치료제",
+    "group_ko": "호르몬치료제(항암)",
+    "dept": "onco",
+    "openfda_search_term": "TAMOXIFEN"
+  },
+  {
+    "id": "amlodipine",
+    "name_ko": "암로디핀",
+    "cls_ko": "칼슘채널차단제",
+    "group_ko": "칼슘채널차단제",
+    "dept": "internal",
+    "openfda_search_term": "AMLODIPINE"
+  },
+  {
+    "id": "metoprolol",
+    "name_ko": "메토프롤롤",
+    "cls_ko": "베타차단제",
+    "group_ko": "베타차단제",
+    "dept": "internal",
+    "openfda_search_term": "METOPROLOL"
+  },
+  {
+    "id": "carvedilol",
+    "name_ko": "카베딜롤",
+    "cls_ko": "베타차단제",
+    "group_ko": "베타차단제",
+    "dept": "internal",
+    "openfda_search_term": "CARVEDILOL"
+  },
+  {
+    "id": "hydrochlorothiazide",
+    "name_ko": "히드로클로로티아지드",
+    "cls_ko": "티아자이드 이뇨제",
+    "group_ko": "티아자이드이뇨제",
+    "dept": "internal",
+    "openfda_search_term": "HYDROCHLOROTHIAZIDE"
+  },
+  {
+    "id": "spironolactone",
+    "name_ko": "스피로놀락톤",
+    "cls_ko": "칼륨보존 이뇨제",
+    "group_ko": "칼륨보존이뇨제",
+    "dept": "internal",
+    "openfda_search_term": "SPIRONOLACTONE"
+  },
+  {
+    "id": "clopidogrel",
+    "name_ko": "클로피도그렐",
+    "cls_ko": "항혈소판제(P2Y12억제제)",
+    "group_ko": "P2Y12억제제",
+    "dept": "internal",
+    "openfda_search_term": "CLOPIDOGREL"
+  },
+  {
+    "id": "digoxin",
+    "name_ko": "디곡신",
+    "cls_ko": "강심배당체",
+    "group_ko": "강심배당체",
+    "dept": "internal",
+    "openfda_search_term": "DIGOXIN"
+  },
+  {
+    "id": "nitroglycerin",
+    "name_ko": "니트로글리세린",
+    "cls_ko": "질산염(협심증)",
+    "group_ko": "질산염",
+    "dept": "internal",
+    "openfda_search_term": "NITROGLYCERIN"
+  },
+  {
+    "id": "apixaban",
+    "name_ko": "아픽사반",
+    "cls_ko": "직접경구항응고제(DOAC)",
+    "group_ko": "DOAC",
+    "dept": "internal",
+    "openfda_search_term": "APIXABAN"
+  },
+  {
+    "id": "rivaroxaban",
+    "name_ko": "리바록사반",
+    "cls_ko": "직접경구항응고제(DOAC)",
+    "group_ko": "DOAC",
+    "dept": "internal",
+    "openfda_search_term": "RIVAROXABAN"
+  },
+  {
+    "id": "enoxaparin",
+    "name_ko": "에녹사파린",
+    "cls_ko": "저분자량헤파린",
+    "group_ko": "저분자량헤파린",
+    "dept": "internal",
+    "openfda_search_term": "ENOXAPARIN"
+  },
+  {
+    "id": "glimepiride",
+    "name_ko": "글리메피리드",
+    "cls_ko": "설포닐우레아(당뇨약)",
+    "group_ko": "설포닐우레아",
+    "dept": "internal",
+    "openfda_search_term": "GLIMEPIRIDE"
+  },
+  {
+    "id": "sitagliptin",
+    "name_ko": "시타글립틴",
+    "cls_ko": "DPP-4억제제(당뇨약)",
+    "group_ko": "DPP-4억제제",
+    "dept": "internal",
+    "openfda_search_term": "SITAGLIPTIN"
+  },
+  {
+    "id": "empagliflozin",
+    "name_ko": "엠파글리플로진",
+    "cls_ko": "SGLT2억제제(당뇨약)",
+    "group_ko": "SGLT2억제제",
+    "dept": "internal",
+    "openfda_search_term": "EMPAGLIFLOZIN"
+  },
+  {
+    "id": "rosuvastatin",
+    "name_ko": "로수바스타틴",
+    "cls_ko": "스타틴",
+    "group_ko": "스타틴",
+    "dept": "internal",
+    "openfda_search_term": "ROSUVASTATIN"
+  },
+  {
+    "id": "ezetimibe",
+    "name_ko": "에제티미브",
+    "cls_ko": "콜레스테롤흡수억제제",
+    "group_ko": "콜레스테롤흡수억제제",
+    "dept": "internal",
+    "openfda_search_term": "EZETIMIBE"
+  },
+  {
+    "id": "omeprazole",
+    "name_ko": "오메프라졸",
+    "cls_ko": "PPI(양성자펌프억제제)",
+    "group_ko": "PPI",
+    "dept": "internal",
+    "openfda_search_term": "OMEPRAZOLE"
+  },
+  {
+    "id": "pantoprazole",
+    "name_ko": "판토프라졸",
+    "cls_ko": "PPI(양성자펌프억제제)",
+    "group_ko": "PPI",
+    "dept": "internal",
+    "openfda_search_term": "PANTOPRAZOLE"
+  },
+  {
+    "id": "famotidine",
+    "name_ko": "파모티딘",
+    "cls_ko": "H2차단제",
+    "group_ko": "H2차단제",
+    "dept": "internal",
+    "openfda_search_term": "FAMOTIDINE"
+  },
+  {
+    "id": "domperidone",
+    "name_ko": "돔페리돈",
+    "cls_ko": "프로키네틱제(소화운동촉진)",
+    "group_ko": "프로키네틱제",
+    "dept": "internal",
+    "openfda_search_term": "DOMPERIDONE"
+  },
+  {
+    "id": "loperamide",
+    "name_ko": "로페라미드",
+    "cls_ko": "지사제",
+    "group_ko": "지사제",
+    "dept": "internal",
+    "openfda_search_term": "LOPERAMIDE"
+  },
+  {
+    "id": "lactulose",
+    "name_ko": "락툴로스",
+    "cls_ko": "삼투성 완하제",
+    "group_ko": "완하제",
+    "dept": "internal",
+    "openfda_search_term": "LACTULOSE"
+  },
+  {
+    "id": "montelukast",
+    "name_ko": "몬테루카스트",
+    "cls_ko": "류코트리엔 수용체 길항제",
+    "group_ko": "류코트리엔억제제",
+    "dept": "internal",
+    "openfda_search_term": "MONTELUKAST"
+  },
+  {
+    "id": "theophylline",
+    "name_ko": "테오필린",
+    "cls_ko": "메틸잔틴계 기관지확장제",
+    "group_ko": "메틸잔틴계",
+    "dept": "internal",
+    "openfda_search_term": "THEOPHYLLINE"
+  },
+  {
+    "id": "salmeterol_fluticasone",
+    "name_ko": "살메테롤/플루티카손",
+    "cls_ko": "흡입형 복합기관지확장제",
+    "group_ko": "흡입복합제",
+    "dept": "internal",
+    "openfda_search_term": "FLUTICASONE PROPIONATE AND SALMETEROL"
+  },
+  {
+    "id": "cetirizine",
+    "name_ko": "세티리진",
+    "cls_ko": "항히스타민제",
+    "group_ko": "항히스타민제",
+    "dept": "internal",
+    "openfda_search_term": "CETIRIZINE"
+  },
+  {
+    "id": "loratadine",
+    "name_ko": "로라타딘",
+    "cls_ko": "항히스타민제",
+    "group_ko": "항히스타민제",
+    "dept": "internal",
+    "openfda_search_term": "LORATADINE"
+  },
+  {
+    "id": "fexofenadine",
+    "name_ko": "펙소페나딘",
+    "cls_ko": "항히스타민제",
+    "group_ko": "항히스타민제",
+    "dept": "internal",
+    "openfda_search_term": "FEXOFENADINE"
+  },
+  {
+    "id": "levothyroxine",
+    "name_ko": "레보티록신",
+    "cls_ko": "갑상선호르몬제",
+    "group_ko": "갑상선호르몬",
+    "dept": "internal",
+    "openfda_search_term": "LEVOTHYROXINE"
+  },
+  {
+    "id": "methimazole",
+    "name_ko": "메티마졸",
+    "cls_ko": "항갑상선제",
+    "group_ko": "항갑상선제",
+    "dept": "internal",
+    "openfda_search_term": "METHIMAZOLE"
+  },
+  {
+    "id": "prednisolone",
+    "name_ko": "프레드니솔론",
+    "cls_ko": "전신 스테로이드",
+    "group_ko": "전신스테로이드",
+    "dept": "internal",
+    "openfda_search_term": "PREDNISOLONE"
+  },
+  {
+    "id": "dexamethasone",
+    "name_ko": "덱사메타손",
+    "cls_ko": "전신 스테로이드",
+    "group_ko": "전신스테로이드",
+    "dept": "internal",
+    "openfda_search_term": "DEXAMETHASONE"
+  },
+  {
+    "id": "cephalexin",
+    "name_ko": "세팔렉신",
+    "cls_ko": "세팔로스포린계 항생제",
+    "group_ko": "세팔로스포린",
+    "dept": "internal",
+    "openfda_search_term": "CEPHALEXIN"
+  },
+  {
+    "id": "ciprofloxacin",
+    "name_ko": "시프로플록사신",
+    "cls_ko": "플루오로퀴놀론계 항생제",
+    "group_ko": "플루오로퀴놀론",
+    "dept": "internal",
+    "openfda_search_term": "CIPROFLOXACIN"
+  },
+  {
+    "id": "levofloxacin",
+    "name_ko": "레보플록사신",
+    "cls_ko": "플루오로퀴놀론계 항생제",
+    "group_ko": "플루오로퀴놀론",
+    "dept": "internal",
+    "openfda_search_term": "LEVOFLOXACIN"
+  },
+  {
+    "id": "doxycycline",
+    "name_ko": "독시사이클린",
+    "cls_ko": "테트라사이클린계 항생제",
+    "group_ko": "테트라사이클린계",
+    "dept": "internal",
+    "openfda_search_term": "DOXYCYCLINE"
+  },
+  {
+    "id": "metronidazole",
+    "name_ko": "메트로니다졸",
+    "cls_ko": "니트로이미다졸계 항생제",
+    "group_ko": "니트로이미다졸계",
+    "dept": "internal",
+    "openfda_search_term": "METRONIDAZOLE"
+  },
+  {
+    "id": "vancomycin",
+    "name_ko": "반코마이신",
+    "cls_ko": "글리코펩타이드계 항생제",
+    "group_ko": "글리코펩타이드계",
+    "dept": "internal",
+    "openfda_search_term": "VANCOMYCIN"
+  },
+  {
+    "id": "pip_tazo",
+    "name_ko": "피페라실린/타조박탐",
+    "cls_ko": "광범위 페니실린계 항생제",
+    "group_ko": "페니실린(광범위)",
+    "dept": "internal",
+    "openfda_search_term": "PIPERACILLIN; TAZOBACTAM"
+  },
+  {
+    "id": "escitalopram",
+    "name_ko": "에스시탈로프람",
+    "cls_ko": "SSRI",
+    "group_ko": "SSRI",
+    "dept": "psych",
+    "openfda_search_term": "ESCITALOPRAM"
+  },
+  {
+    "id": "quetiapine",
+    "name_ko": "퀘티아핀",
+    "cls_ko": "항정신병약물(2세대)",
+    "group_ko": "항정신병약물(2세대)",
+    "dept": "psych",
+    "openfda_search_term": "QUETIAPINE"
+  },
+  {
+    "id": "risperidone",
+    "name_ko": "리스페리돈",
+    "cls_ko": "항정신병약물(2세대)",
+    "group_ko": "항정신병약물(2세대)",
+    "dept": "psych",
+    "openfda_search_term": "RISPERIDONE"
+  },
+  {
+    "id": "alprazolam",
+    "name_ko": "알프라졸람",
+    "cls_ko": "벤조디아제핀(항불안제)",
+    "group_ko": "벤조디아제핀계열(수면진정제)",
+    "dept": "psych",
+    "openfda_search_term": "ALPRAZOLAM"
+  },
+  {
+    "id": "diazepam",
+    "name_ko": "디아제팜",
+    "cls_ko": "벤조디아제핀(항불안제)",
+    "group_ko": "벤조디아제핀계열(수면진정제)",
+    "dept": "psych",
+    "openfda_search_term": "DIAZEPAM"
+  },
+  {
+    "id": "zolpidem",
+    "name_ko": "졸피뎀",
+    "cls_ko": "수면유도제(Z-drug)",
+    "group_ko": "벤조디아제핀계열(수면진정제)",
+    "dept": "psych",
+    "openfda_search_term": "ZOLPIDEM"
+  },
+  {
+    "id": "valproate",
+    "name_ko": "발프로산",
+    "cls_ko": "항경련제/기분안정제",
+    "group_ko": "항경련제/기분안정제",
+    "dept": "psych",
+    "openfda_search_term": "VALPROATE"
+  },
+  {
+    "id": "cefaclor",
+    "name_ko": "세파클러",
+    "cls_ko": "세팔로스포린계 항생제(소아용)",
+    "group_ko": "세팔로스포린",
+    "dept": "peds",
+    "openfda_search_term": "CEFACLOR"
+  },
+  {
+    "id": "dextromethorphan",
+    "name_ko": "덱스트로메토르판",
+    "cls_ko": "진해제(소아 기침약)",
+    "group_ko": "진해제",
+    "dept": "peds",
+    "openfda_search_term": "DEXTROMETHORPHAN"
+  },
+  {
+    "id": "progesterone",
+    "name_ko": "프로게스테론",
+    "cls_ko": "호르몬제",
+    "group_ko": "호르몬제",
+    "dept": "obgyn",
+    "openfda_search_term": "PROGESTERONE"
+  },
+  {
+    "id": "estradiol",
+    "name_ko": "에스트라디올",
+    "cls_ko": "호르몬제",
+    "group_ko": "호르몬제",
+    "dept": "obgyn",
+    "openfda_search_term": "ESTRADIOL"
+  },
+  {
+    "id": "naproxen",
+    "name_ko": "나프록센",
+    "cls_ko": "NSAID",
+    "group_ko": "NSAID",
+    "dept": "ortho",
+    "openfda_search_term": "NAPROXEN"
+  },
+  {
+    "id": "diclofenac",
+    "name_ko": "디클로페낙",
+    "cls_ko": "NSAID",
+    "group_ko": "NSAID",
+    "dept": "ortho",
+    "openfda_search_term": "DICLOFENAC"
+  },
+  {
+    "id": "gabapentin",
+    "name_ko": "가바펜틴",
+    "cls_ko": "가바펜티노이드(신경병증성 통증)",
+    "group_ko": "가바펜티노이드",
+    "dept": "ortho",
+    "openfda_search_term": "GABAPENTIN"
+  },
+  {
+    "id": "pregabalin",
+    "name_ko": "프레가발린",
+    "cls_ko": "가바펜티노이드(신경병증성 통증)",
+    "group_ko": "가바펜티노이드",
+    "dept": "ortho",
+    "openfda_search_term": "PREGABALIN"
+  },
+  {
+    "id": "methylprednisolone",
+    "name_ko": "메틸프레드니솔론",
+    "cls_ko": "전신 스테로이드(주사)",
+    "group_ko": "전신스테로이드",
+    "dept": "ortho",
+    "openfda_search_term": "METHYLPREDNISOLONE"
+  },
+  {
+    "id": "donepezil",
+    "name_ko": "도네페질",
+    "cls_ko": "콜린에스테라제억제제(치매)",
+    "group_ko": "콜린에스테라제억제제",
+    "dept": "neuro",
+    "openfda_search_term": "DONEPEZIL"
+  },
+  {
+    "id": "levodopa_carbidopa",
+    "name_ko": "레보도파/카비도파",
+    "cls_ko": "파킨슨병 치료제",
+    "group_ko": "파킨슨병치료제",
+    "dept": "neuro",
+    "openfda_search_term": "CARBIDOPA AND LEVODOPA"
+  },
+  {
+    "id": "phenytoin",
+    "name_ko": "페니토인",
+    "cls_ko": "항경련제",
+    "group_ko": "항경련제(신경과)",
+    "dept": "neuro",
+    "openfda_search_term": "PHENYTOIN"
+  },
+  {
+    "id": "levetiracetam",
+    "name_ko": "레베티라세탐",
+    "cls_ko": "항경련제",
+    "group_ko": "항경련제(신경과)",
+    "dept": "neuro",
+    "openfda_search_term": "LEVETIRACETAM"
+  },
+  {
+    "id": "isotretinoin",
+    "name_ko": "이소트레티노인",
+    "cls_ko": "레티노이드(중증여드름)",
+    "group_ko": "레티노이드",
+    "dept": "derm",
+    "openfda_search_term": "ISOTRETINOIN"
+  },
+  {
+    "id": "clindamycin_topical",
+    "name_ko": "클린다마이신(국소)",
+    "cls_ko": "국소 항생제",
+    "group_ko": "국소항생제",
+    "dept": "derm",
+    "openfda_search_term": "CLINDAMYCIN PHOSPHATE"
+  },
+  {
+    "id": "hydrocortisone_cream",
+    "name_ko": "히드로코르티손 연고",
+    "cls_ko": "국소 스테로이드(저강도)",
+    "group_ko": "국소스테로이드",
+    "dept": "derm",
+    "openfda_search_term": "HYDROCORTISONE"
+  },
+  {
+    "id": "betamethasone_cream",
+    "name_ko": "베타메타손 연고",
+    "cls_ko": "국소 스테로이드(고강도)",
+    "group_ko": "국소스테로이드",
+    "dept": "derm",
+    "openfda_search_term": "BETAMETHASONE DIPROPIONATE"
+  },
+  {
+    "id": "bisoprolol",
+    "name_ko": "비소프롤롤",
+    "cls_ko": "베타차단제",
+    "group_ko": "베타차단제",
+    "dept": "internal",
+    "openfda_search_term": "BISOPROLOL"
+  },
+  {
+    "id": "propranolol",
+    "name_ko": "프로프라놀롤",
+    "cls_ko": "베타차단제(비선택적)",
+    "group_ko": "베타차단제",
+    "dept": "internal",
+    "openfda_search_term": "PROPRANOLOL"
+  },
+  {
+    "id": "nifedipine",
+    "name_ko": "니페디핀",
+    "cls_ko": "칼슘채널차단제",
+    "group_ko": "칼슘채널차단제",
+    "dept": "internal",
+    "openfda_search_term": "NIFEDIPINE"
+  },
+  {
+    "id": "diltiazem",
+    "name_ko": "딜티아젬",
+    "cls_ko": "칼슘채널차단제",
+    "group_ko": "칼슘채널차단제",
+    "dept": "internal",
+    "openfda_search_term": "DILTIAZEM"
+  },
+  {
+    "id": "valsartan",
+    "name_ko": "발사르탄",
+    "cls_ko": "ARB(안지오텐신Ⅱ수용체차단제)",
+    "group_ko": "RAS억제제",
+    "dept": "internal",
+    "openfda_search_term": "VALSARTAN"
+  },
+  {
+    "id": "candesartan",
+    "name_ko": "칸데사르탄",
+    "cls_ko": "ARB(안지오텐신Ⅱ수용체차단제)",
+    "group_ko": "RAS억제제",
+    "dept": "internal",
+    "openfda_search_term": "CANDESARTAN"
+  },
+  {
+    "id": "telmisartan",
+    "name_ko": "텔미사르탄",
+    "cls_ko": "ARB(안지오텐신Ⅱ수용체차단제)",
+    "group_ko": "RAS억제제",
+    "dept": "internal",
+    "openfda_search_term": "TELMISARTAN"
+  },
+  {
+    "id": "ramipril",
+    "name_ko": "라미프릴",
+    "cls_ko": "ACE 억제제",
+    "group_ko": "RAS억제제",
+    "dept": "internal",
+    "openfda_search_term": "RAMIPRIL"
+  },
+  {
+    "id": "torsemide",
+    "name_ko": "토르세미드",
+    "cls_ko": "루프이뇨제",
+    "group_ko": "이뇨제",
+    "dept": "internal",
+    "openfda_search_term": "TORSEMIDE"
+  },
+  {
+    "id": "amiodarone",
+    "name_ko": "아미오다론",
+    "cls_ko": "항부정맥제",
+    "group_ko": "항부정맥제",
+    "dept": "internal",
+    "openfda_search_term": "AMIODARONE"
+  },
+  {
+    "id": "isosorbide",
+    "name_ko": "이소소르비드",
+    "cls_ko": "질산염(협심증)",
+    "group_ko": "질산염",
+    "dept": "internal",
+    "openfda_search_term": "ISOSORBIDE"
+  },
+  {
+    "id": "clonidine",
+    "name_ko": "클로니딘",
+    "cls_ko": "중추성 항고혈압제",
+    "group_ko": "중추성항고혈압제",
+    "dept": "internal",
+    "openfda_search_term": "CLONIDINE"
+  },
+  {
+    "id": "pravastatin",
+    "name_ko": "프라바스타틴",
+    "cls_ko": "스타틴",
+    "group_ko": "스타틴",
+    "dept": "internal",
+    "openfda_search_term": "PRAVASTATIN"
+  },
+  {
+    "id": "fenofibrate",
+    "name_ko": "페노피브레이트",
+    "cls_ko": "피브레이트계(고지혈증)",
+    "group_ko": "피브레이트계",
+    "dept": "internal",
+    "openfda_search_term": "FENOFIBRATE"
+  },
+  {
+    "id": "niacin",
+    "name_ko": "니아신",
+    "cls_ko": "고지혈증 치료제",
+    "group_ko": "니아신",
+    "dept": "internal",
+    "openfda_search_term": "NIACIN"
+  },
+  {
+    "id": "dabigatran",
+    "name_ko": "다비가트란",
+    "cls_ko": "직접경구항응고제(DOAC)",
+    "group_ko": "DOAC",
+    "dept": "internal",
+    "openfda_search_term": "DABIGATRAN"
+  },
+  {
+    "id": "edoxaban",
+    "name_ko": "에독사반",
+    "cls_ko": "직접경구항응고제(DOAC)",
+    "group_ko": "DOAC",
+    "dept": "internal",
+    "openfda_search_term": "EDOXABAN"
+  },
+  {
+    "id": "heparin",
+    "name_ko": "헤파린",
+    "cls_ko": "미분획 헤파린",
+    "group_ko": "헤파린",
+    "dept": "internal",
+    "openfda_search_term": "HEPARIN"
+  },
+  {
+    "id": "glipizide",
+    "name_ko": "글리피지드",
+    "cls_ko": "설포닐우레아(당뇨약)",
+    "group_ko": "설포닐우레아",
+    "dept": "internal",
+    "openfda_search_term": "GLIPIZIDE"
+  },
+  {
+    "id": "pioglitazone",
+    "name_ko": "피오글리타존",
+    "cls_ko": "티아졸리딘디온(당뇨약)",
+    "group_ko": "티아졸리딘디온",
+    "dept": "internal",
+    "openfda_search_term": "PIOGLITAZONE"
+  },
+  {
+    "id": "dapagliflozin",
+    "name_ko": "다파글리플로진",
+    "cls_ko": "SGLT2억제제(당뇨약)",
+    "group_ko": "SGLT2억제제",
+    "dept": "internal",
+    "openfda_search_term": "DAPAGLIFLOZIN"
+  },
+  {
+    "id": "insulin_glargine",
+    "name_ko": "인슐린 글라진",
+    "cls_ko": "인슐린(장시간형)",
+    "group_ko": "인슐린(장시간형)",
+    "dept": "internal",
+    "openfda_search_term": "INSULIN GLARGINE"
+  },
+  {
+    "id": "insulin_aspart",
+    "name_ko": "인슐린 아스파트",
+    "cls_ko": "인슐린(속효형)",
+    "group_ko": "인슐린(속효형)",
+    "dept": "internal",
+    "openfda_search_term": "INSULIN ASPART"
+  },
+  {
+    "id": "linagliptin",
+    "name_ko": "리나글립틴",
+    "cls_ko": "DPP-4억제제(당뇨약)",
+    "group_ko": "DPP-4억제제",
+    "dept": "internal",
+    "openfda_search_term": "LINAGLIPTIN"
+  },
+  {
+    "id": "acarbose",
+    "name_ko": "아카보스",
+    "cls_ko": "알파글루코시다제억제제",
+    "group_ko": "알파글루코시다제억제제",
+    "dept": "internal",
+    "openfda_search_term": "ACARBOSE"
+  },
+  {
+    "id": "esomeprazole",
+    "name_ko": "에소메프라졸",
+    "cls_ko": "PPI(양성자펌프억제제)",
+    "group_ko": "PPI",
+    "dept": "internal",
+    "openfda_search_term": "ESOMEPRAZOLE"
+  },
+  {
+    "id": "rabeprazole",
+    "name_ko": "라베프라졸",
+    "cls_ko": "PPI(양성자펌프억제제)",
+    "group_ko": "PPI",
+    "dept": "internal",
+    "openfda_search_term": "RABEPRAZOLE"
+  },
+  {
+    "id": "mesalazine",
+    "name_ko": "메살라진",
+    "cls_ko": "5-ASA제제(염증성장질환)",
+    "group_ko": "5-ASA제제",
+    "dept": "internal",
+    "openfda_search_term": "MESALAZINE"
+  },
+  {
+    "id": "ursodeoxycholic_acid",
+    "name_ko": "우르소데옥시콜산",
+    "cls_ko": "담즙산제제",
+    "group_ko": "담즙산제제",
+    "dept": "internal",
+    "openfda_search_term": "URSODEOXYCHOLIC ACID"
+  },
+  {
+    "id": "simethicone",
+    "name_ko": "시메티콘",
+    "cls_ko": "소포제(가스제거)",
+    "group_ko": "소포제",
+    "dept": "internal",
+    "openfda_search_term": "SIMETHICONE"
+  },
+  {
+    "id": "bisacodyl",
+    "name_ko": "비사코딜",
+    "cls_ko": "자극성 완하제",
+    "group_ko": "완하제",
+    "dept": "internal",
+    "openfda_search_term": "BISACODYL"
+  },
+  {
+    "id": "metoclopramide",
+    "name_ko": "메토클로프라미드",
+    "cls_ko": "프로키네틱제(소화운동촉진)",
+    "group_ko": "프로키네틱제",
+    "dept": "internal",
+    "openfda_search_term": "METOCLOPRAMIDE"
+  },
+  {
+    "id": "budesonide_inh",
+    "name_ko": "부데소니드(흡입)",
+    "cls_ko": "흡입형 스테로이드",
+    "group_ko": "흡입스테로이드",
+    "dept": "internal",
+    "openfda_search_term": "BUDESONIDE"
+  },
+  {
+    "id": "tiotropium",
+    "name_ko": "티오트로피움",
+    "cls_ko": "항콜린성 기관지확장제",
+    "group_ko": "항콜린성기관지확장제",
+    "dept": "internal",
+    "openfda_search_term": "TIOTROPIUM"
+  },
+  {
+    "id": "pseudoephedrine",
+    "name_ko": "슈도에페드린",
+    "cls_ko": "비충혈제거제",
+    "group_ko": "비충혈제거제",
+    "dept": "internal",
+    "openfda_search_term": "PSEUDOEPHEDRINE"
+  },
+  {
+    "id": "guaifenesin",
+    "name_ko": "구아이페네신",
+    "cls_ko": "거담제",
+    "group_ko": "거담제",
+    "dept": "internal",
+    "openfda_search_term": "GUAIFENESIN"
+  },
+  {
+    "id": "fluticasone_nasal",
+    "name_ko": "플루티카손(비강스프레이)",
+    "cls_ko": "비강 스테로이드",
+    "group_ko": "비강스테로이드",
+    "dept": "internal",
+    "openfda_search_term": "FLUTICASONE PROPIONATE"
+  },
+  {
+    "id": "allopurinol",
+    "name_ko": "알로퓨리놀",
+    "cls_ko": "통풍 치료제",
+    "group_ko": "통풍치료제",
+    "dept": "internal",
+    "openfda_search_term": "ALLOPURINOL"
+  },
+  {
+    "id": "colchicine",
+    "name_ko": "콜히친",
+    "cls_ko": "통풍 치료제",
+    "group_ko": "통풍치료제",
+    "dept": "internal",
+    "openfda_search_term": "COLCHICINE"
+  },
+  {
+    "id": "trimethoprim_sulfa",
+    "name_ko": "트리메토프림/설파메톡사졸",
+    "cls_ko": "설파제 항생제",
+    "group_ko": "설파제",
+    "dept": "internal",
+    "openfda_search_term": "SULFAMETHOXAZOLE AND TRIMETHOPRIM"
+  },
+  {
+    "id": "clindamycin_oral",
+    "name_ko": "클린다마이신(경구)",
+    "cls_ko": "린코사마이드계 항생제",
+    "group_ko": "린코사마이드계",
+    "dept": "internal",
+    "openfda_search_term": "CLINDAMYCIN HYDROCHLORIDE"
+  },
+  {
+    "id": "meropenem",
+    "name_ko": "메로페넴",
+    "cls_ko": "카바페넴계 항생제",
+    "group_ko": "카바페넴계",
+    "dept": "internal",
+    "openfda_search_term": "MEROPENEM"
+  },
+  {
+    "id": "fluconazole",
+    "name_ko": "플루코나졸",
+    "cls_ko": "항진균제",
+    "group_ko": "항진균제",
+    "dept": "internal",
+    "openfda_search_term": "FLUCONAZOLE"
+  },
+  {
+    "id": "acyclovir",
+    "name_ko": "아시클로버",
+    "cls_ko": "항바이러스제",
+    "group_ko": "항바이러스제",
+    "dept": "internal",
+    "openfda_search_term": "ACYCLOVIR"
+  },
+  {
+    "id": "oseltamivir",
+    "name_ko": "오셀타미비르",
+    "cls_ko": "항바이러스제(인플루엔자)",
+    "group_ko": "항바이러스제(인플루엔자)",
+    "dept": "internal",
+    "openfda_search_term": "OSELTAMIVIR"
+  },
+  {
+    "id": "venlafaxine",
+    "name_ko": "벤라팍신",
+    "cls_ko": "SNRI",
+    "group_ko": "SNRI",
+    "dept": "psych",
+    "openfda_search_term": "VENLAFAXINE"
+  },
+  {
+    "id": "duloxetine",
+    "name_ko": "둘록세틴",
+    "cls_ko": "SNRI",
+    "group_ko": "SNRI",
+    "dept": "psych",
+    "openfda_search_term": "DULOXETINE"
+  },
+  {
+    "id": "bupropion",
+    "name_ko": "부프로피온",
+    "cls_ko": "NDRI(항우울제)",
+    "group_ko": "NDRI",
+    "dept": "psych",
+    "openfda_search_term": "BUPROPION"
+  },
+  {
+    "id": "mirtazapine",
+    "name_ko": "미르타자핀",
+    "cls_ko": "NaSSA(항우울제)",
+    "group_ko": "NaSSA",
+    "dept": "psych",
+    "openfda_search_term": "MIRTAZAPINE"
+  },
+  {
+    "id": "olanzapine",
+    "name_ko": "올란자핀",
+    "cls_ko": "항정신병약물(2세대)",
+    "group_ko": "항정신병약물(2세대)",
+    "dept": "psych",
+    "openfda_search_term": "OLANZAPINE"
+  },
+  {
+    "id": "aripiprazole",
+    "name_ko": "아리피프라졸",
+    "cls_ko": "항정신병약물(2세대)",
+    "group_ko": "항정신병약물(2세대)",
+    "dept": "psych",
+    "openfda_search_term": "ARIPIPRAZOLE"
+  },
+  {
+    "id": "clonazepam",
+    "name_ko": "클로나제팜",
+    "cls_ko": "벤조디아제핀",
+    "group_ko": "벤조디아제핀계열(수면진정제)",
+    "dept": "psych",
+    "openfda_search_term": "CLONAZEPAM"
+  },
+  {
+    "id": "carbamazepine",
+    "name_ko": "카바마제핀",
+    "cls_ko": "항경련제/기분안정제",
+    "group_ko": "항경련제(신경과)",
+    "dept": "neuro",
+    "openfda_search_term": "CARBAMAZEPINE"
+  },
+  {
+    "id": "topiramate",
+    "name_ko": "토피라메이트",
+    "cls_ko": "항경련제",
+    "group_ko": "항경련제(신경과)",
+    "dept": "neuro",
+    "openfda_search_term": "TOPIRAMATE"
+  },
+  {
+    "id": "lamotrigine",
+    "name_ko": "라모트리진",
+    "cls_ko": "항경련제/기분안정제",
+    "group_ko": "항경련제(신경과)",
+    "dept": "neuro",
+    "openfda_search_term": "LAMOTRIGINE"
+  },
+  {
+    "id": "memantine",
+    "name_ko": "메만틴",
+    "cls_ko": "NMDA수용체 길항제(치매)",
+    "group_ko": "NMDA수용체길항제",
+    "dept": "neuro",
+    "openfda_search_term": "MEMANTINE"
+  },
+  {
+    "id": "sumatriptan",
+    "name_ko": "수마트립탄",
+    "cls_ko": "트립탄계(편두통)",
+    "group_ko": "트립탄계",
+    "dept": "neuro",
+    "openfda_search_term": "SUMATRIPTAN"
+  },
+  {
+    "id": "baclofen",
+    "name_ko": "바클로펜",
+    "cls_ko": "중추성 근이완제",
+    "group_ko": "근이완제",
+    "dept": "neuro",
+    "openfda_search_term": "BACLOFEN"
+  },
+  {
+    "id": "meloxicam",
+    "name_ko": "멜록시캄",
+    "cls_ko": "NSAID",
+    "group_ko": "NSAID",
+    "dept": "ortho",
+    "openfda_search_term": "MELOXICAM"
+  },
+  {
+    "id": "ketorolac",
+    "name_ko": "케토롤락",
+    "cls_ko": "NSAID(주사용)",
+    "group_ko": "NSAID",
+    "dept": "ortho",
+    "openfda_search_term": "KETOROLAC"
+  },
+  {
+    "id": "morphine",
+    "name_ko": "모르핀",
+    "cls_ko": "오피오이드 진통제",
+    "group_ko": "오피오이드",
+    "dept": "ortho",
+    "openfda_search_term": "MORPHINE"
+  },
+  {
+    "id": "oxycodone",
+    "name_ko": "옥시코돈",
+    "cls_ko": "오피오이드 진통제",
+    "group_ko": "오피오이드",
+    "dept": "ortho",
+    "openfda_search_term": "OXYCODONE"
+  },
+  {
+    "id": "fentanyl_patch",
+    "name_ko": "펜타닐 패치",
+    "cls_ko": "오피오이드 진통제(경피)",
+    "group_ko": "오피오이드",
+    "dept": "ortho",
+    "openfda_search_term": "FENTANYL PATCH"
+  },
+  {
+    "id": "methocarbamol",
+    "name_ko": "메토카르바몰",
+    "cls_ko": "말초성 근이완제",
+    "group_ko": "근이완제",
+    "dept": "ortho",
+    "openfda_search_term": "METHOCARBAMOL"
+  },
+  {
+    "id": "clomiphene",
+    "name_ko": "클로미펜",
+    "cls_ko": "배란유도제",
+    "group_ko": "배란유도제",
+    "dept": "obgyn",
+    "openfda_search_term": "CLOMIPHENE"
+  },
+  {
+    "id": "combined_oc",
+    "name_ko": "복합경구피임제",
+    "cls_ko": "경구피임제",
+    "group_ko": "경구피임제",
+    "dept": "obgyn",
+    "openfda_search_term": "ETHINYL ESTRADIOL AND NORETHINDRONE"
+  },
+  {
+    "id": "magnesium_sulfate",
+    "name_ko": "황산마그네슘",
+    "cls_ko": "자간전증 치료제",
+    "group_ko": "자간전증치료제",
+    "dept": "obgyn",
+    "openfda_search_term": "MAGNESIUM SULFATE"
+  },
+  {
+    "id": "cefdinir",
+    "name_ko": "세프디니르",
+    "cls_ko": "세팔로스포린계 항생제(소아용)",
+    "group_ko": "세팔로스포린",
+    "dept": "peds",
+    "openfda_search_term": "CEFDINIR"
+  },
+  {
+    "id": "cisplatin",
+    "name_ko": "시스플라틴",
+    "cls_ko": "백금착제 항암제",
+    "group_ko": "백금착제",
+    "dept": "onco",
+    "openfda_search_term": "CISPLATIN"
+  },
+  {
+    "id": "carboplatin",
+    "name_ko": "카보플라틴",
+    "cls_ko": "백금착제 항암제",
+    "group_ko": "백금착제",
+    "dept": "onco",
+    "openfda_search_term": "CARBOPLATIN"
+  },
+  {
+    "id": "fluorouracil",
+    "name_ko": "5-플루오로우라실",
+    "cls_ko": "대사길항제(항암제)",
+    "group_ko": "대사길항제",
+    "dept": "onco",
+    "openfda_search_term": "FLUOROURACIL"
+  },
+  {
+    "id": "methotrexate",
+    "name_ko": "메토트렉세이트",
+    "cls_ko": "대사길항제(항암/류마티스)",
+    "group_ko": "대사길항제",
+    "dept": "onco",
+    "openfda_search_term": "METHOTREXATE"
+  },
+  {
+    "id": "rituximab",
+    "name_ko": "리툭시맙",
+    "cls_ko": "단클론항체 항암제",
+    "group_ko": "단클론항체",
+    "dept": "onco",
+    "openfda_search_term": "RITUXIMAB"
+  },
+  {
+    "id": "trastuzumab",
+    "name_ko": "트라스투주맙",
+    "cls_ko": "단클론항체 항암제",
+    "group_ko": "단클론항체",
+    "dept": "onco",
+    "openfda_search_term": "TRASTUZUMAB"
+  },
+  {
+    "id": "imatinib",
+    "name_ko": "이매티닙",
+    "cls_ko": "표적치료제(TKI)",
+    "group_ko": "표적치료제(TKI)",
+    "dept": "onco",
+    "openfda_search_term": "IMATINIB"
+  },
+  {
+    "id": "terbinafine",
+    "name_ko": "테르비나핀",
+    "cls_ko": "항진균제(경구/외용)",
+    "group_ko": "항진균제",
+    "dept": "derm",
+    "openfda_search_term": "TERBINAFINE"
+  },
+  {
+    "id": "permethrin",
+    "name_ko": "퍼메트린",
+    "cls_ko": "옴 치료제(외용)",
+    "group_ko": "살충제(외용)",
+    "dept": "derm",
+    "openfda_search_term": "PERMETHRIN"
+  },
+  {
+    "id": "calcipotriol",
+    "name_ko": "칼시포트리올",
+    "cls_ko": "비타민D 유도체(건선, 외용)",
+    "group_ko": "비타민D유도체(외용)",
+    "dept": "derm",
+    "openfda_search_term": "CALCIPOTRIOL"
+  },
+  {
+    "id": "tacrolimus_topical",
+    "name_ko": "타크로리무스 연고",
+    "cls_ko": "국소 칼시뉴린억제제",
+    "group_ko": "국소칼시뉴린억제제",
+    "dept": "derm",
+    "openfda_search_term": "TACROLIMUS"
+  }
+]
