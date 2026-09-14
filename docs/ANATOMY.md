@@ -97,7 +97,7 @@ ASCII 키워드에는 단어 경계를 적용해 AST가 last, GI가 digoxin에 �
 
 ## 현재 범위와 확장 지점
 
-현재 모델은 직접 만든 **procedural/basic anatomy placeholder**입니다. 장기 분리·선택·위험 연결·실제 절단 기능은 동작하지만 레퍼런스 영상과 같은 정밀 해부학 GLB 또는 CT 재구성은 아닙니다. 실제 CT/MRI/DICOM, 종양·출혈 위치, 환자 영상·segmentation은 포함하지 않습니다. 단면의 상대 좌표는 mm가 아니며, 절단면 표면 캡을 생성하지 않으므로 잘린 메시 내부는 열린 형태입니다.
+현재 모델은 직접 만든 **procedural/basic anatomy placeholder**입니다. 장기 메시를 감싸는 반투명 인체 실루엣(머리·목·몸통·골반·팔·다리)도 같은 방식의 절차적 참고 형상이며, 장기 분리·선택·위험 연결·실제 절단 기능은 동작하지만 레퍼런스 영상과 같은 정밀 해부학 GLB 또는 CT 재구성은 아닙니다. 실제 CT/MRI/DICOM, 종양·출혈 위치, 환자 영상·segmentation은 포함하지 않습니다. 단면의 상대 좌표는 mm가 아니며, 절단면 표면 캡을 생성하지 않으므로 잘린 메시 내부는 열린 형태입니다.
 
 정밀 GLB 교체 위치와 필수 mesh 이름은 `frontend/public/models/anatomy/README.md`를 참고하십시오. 모델 파일이 없거나 형식이 맞지 않으면 기본 모델로 대체합니다. 제3자 장기 모델은 번들에 포함하지 않았습니다. 폰트 라이선스는 `docs/licenses/Noto-Sans-KR-OFL.txt`에 포함했습니다.
 

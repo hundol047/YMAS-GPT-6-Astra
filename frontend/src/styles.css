@@ -8,3 +8,38 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 .patient-row-top small,.patient-row-bottom,.list-caption,.patient-facts span,.alert-body p,.checks-panel p,.pipeline-step small,.summary-note,.summary-counts>span{font-size:.875rem}
+
+.new-patient-button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;padding:11px;border:1px dashed #9fc4bd;border-radius:8px;background:#f2f8f6;color:var(--teal);font-size:.8125rem;font-weight:600}
+.new-patient-button:hover{background:#e6f3ef}
+.patient-row .custom-tag{font-size:.625rem;letter-spacing:.4px;background:#eef2fb;color:#4a5ea3;padding:2px 6px;border-radius:4px;margin-left:6px}
+.patient-row-delete{flex-shrink:0;align-self:center;margin-right:8px;background:transparent;color:#8fa2a7;padding:6px;border-radius:6px}
+.patient-row-delete:hover{background:#fbe9e7;color:#ac3d3a}
+.patient-row{padding:0;display:flex;align-items:stretch}
+.patient-row-btn{all:unset;box-sizing:border-box;display:block;flex:1;min-width:0;cursor:pointer;padding:13px 10px;border-radius:9px}
+
+.custom-patient-drawer{width:640px}
+.cp-form{margin-top:10px}
+.cp-section{border-top:1px solid var(--line);padding:18px 0}
+.cp-section:first-of-type{border-top:0;padding-top:6px}
+.cp-section h3{font-size:.875rem;margin:0 0 12px;color:var(--ink)}
+.cp-section h3 small{font-weight:400;color:var(--muted)}
+.cp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cp-grid label{display:flex;flex-direction:column;gap:6px;font-size:.75rem;color:var(--muted)}
+.cp-grid .cp-wide{grid-column:1/-1}
+.cp-form input[type=text],.cp-form input[type=number],.cp-form input[type=date],.cp-form input:not([type]){border:1px solid #cddcde;border-radius:6px;padding:9px 10px;font-size:.875rem;color:var(--ink);width:100%;background:white}
+.cp-form input:focus-visible,.cp-form select:focus-visible{outline:2px solid #27a899;outline-offset:1px}
+.cp-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.cp-row select{flex:1.4;min-width:150px}
+.cp-row input{flex:1;min-width:90px}
+.cp-row-allergy input:first-child{flex:1.3}
+.cp-row-lab input{min-width:70px}
+.cp-remove{background:#fbe9e7;color:#ac3d3a;border-radius:6px;padding:8px;flex-shrink:0}
+.cp-remove:hover{background:#f7d9d5}
+.cp-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.cp-tag{display:inline-flex;align-items:center;gap:5px;background:#eef5f4;color:#177a66;padding:5px 6px 5px 10px;border-radius:14px;font-size:.75rem}
+.cp-tag button{color:#177a66;display:flex;align-items:center}
+.cp-tag-input{display:flex;gap:8px}
+.cp-tag-input input{flex:1}
+.cp-error{background:#fff1ec;color:#9e493c;padding:10px 12px;border-radius:6px;font-size:.8125rem;margin:6px 0}
+.cp-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px;position:sticky;bottom:-24px;background:white;padding:14px 0 0}
+@media (max-width:720px){.custom-patient-drawer{width:100%}.cp-grid{grid-template-columns:1fr}}
