@@ -1,0 +1,8 @@
+{
+  "kidneys": {"keywords": ["renal", "kidney", "kidneys", "CKD", "eGFR", "Creatinine", "신장", "신기능", "신부전"]},
+  "liver": {"keywords": ["hepatic", "liver", "AST", "ALT", "간기능", "간질환", "간독성", "간부전"]},
+  "heart": {"keywords": ["cardiac", "QT", "arrhythmia", "heart failure", "심장", "심부전", "부정맥"]},
+  "lungs": {"keywords": ["respiratory", "pulmonary", "COPD", "호흡", "폐질환", "천식"]},
+  "stomach": {"keywords": ["gastric", "stomach", "GI", "위장", "위궤양", "소화기"]},
+  "brain": {"keywords": ["neurologic", "CNS", "중추신경", "뇌", "인지"]}
+}

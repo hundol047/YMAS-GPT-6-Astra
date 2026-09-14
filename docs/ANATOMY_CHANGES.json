@@ -1,0 +1,42 @@
+{
+  "modified": [
+    "README.md",
+    "backend/app/main.py",
+    "backend/app/services/clinical_agent.py",
+    "frontend/package-lock.json",
+    "frontend/package.json",
+    "frontend/src/App.jsx",
+    "frontend/src/main.jsx",
+    "frontend/src/styles.css"
+  ],
+  "added": [
+    "backend/app/services/anatomy.py",
+    "backend/data/anatomy_mapping.json",
+    "backend/data/audit.sqlite3-shm",
+    "backend/data/audit.sqlite3-wal",
+    "backend/tests/test_anatomy.py",
+    "docs/ANATOMY.md",
+    "docs/ANATOMY_CHANGES.json",
+    "docs/ANATOMY_VALIDATION.md",
+    "docs/anatomy-validation/anatomy-mobile.png",
+    "docs/anatomy-validation/anatomy-overview.png",
+    "docs/anatomy-validation/fallback-result.txt",
+    "docs/anatomy-validation/results.json",
+    "docs/licenses/Noto-Sans-KR-OFL.txt",
+    "frontend/public/models/anatomy/README.md",
+    "frontend/src/components/anatomy/AnatomyAssets.jsx",
+    "frontend/src/components/anatomy/AnatomyControls.jsx",
+    "frontend/src/components/anatomy/AnatomyLegend.jsx",
+    "frontend/src/components/anatomy/AnatomyModel.jsx",
+    "frontend/src/components/anatomy/AnatomyOrganList.jsx",
+    "frontend/src/components/anatomy/AnatomyRiskPanel.jsx",
+    "frontend/src/components/anatomy/AnatomyScene.jsx",
+    "frontend/src/components/anatomy/AnatomySlicePanel.jsx",
+    "frontend/src/components/anatomy/AnatomyWorkspace.jsx",
+    "frontend/src/components/anatomy/anatomy.css",
+    "frontend/src/components/anatomy/geometry.js",
+    "frontend/src/data/anatomyMap.js",
+    "frontend/tests/anatomy.test.jsx"
+  ],
+  "rebuilt": "frontend/dist/"
+}

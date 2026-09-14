@@ -1,0 +1,48 @@
+import React from 'react';
+import {afterEach,expect,test,vi} from 'vitest';
+import {render,screen,waitFor,cleanup,within,fireEvent} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import App from '../src/App';
+// jsdom cannot render WebGL. Real rendering is checked separately in Chromium.
+vi.mock('../src/components/anatomy/AnatomyScene',()=>({default:({selected,position,clipping,view})=><div data-testid="scene">{selected}:{position}:{String(clipping)}:{view.kind}</div>}));
+afterEach(cleanup);
+test('alert/anatomy navigation, controls, patient identity and systemic mapping use real API',async()=>{
+ const user=userEvent.setup();render(<App/>);
+ await screen.findByText('HIGH · 모델 고위험');
+ await user.click(screen.getByRole('button',{name:/아스피린 \+ 와파린/}));
+ await user.click(screen.getByRole('button',{name:'3D에서 보기'}));
+ await screen.findByTestId('scene');
+ await waitFor(()=>expect(screen.getByTestId('scene').textContent).toContain('vascular'));
+ expect(document.querySelector('.an-risk-panel').textContent).toContain('아스피린 + 와파린');
+ await user.click(within(document.querySelector('.an-risk-panel')).getAllByRole('button',{name:/관련 경고 보기/})[0]);
+ expect(screen.getByRole('dialog')).toBeTruthy();
+ await user.click(screen.getByRole('button',{name:'경고 상세 닫기'}));
+ await user.click(screen.getByRole('button',{name:/SYN-005/}));
+ await screen.findByTestId('scene');
+ await user.click(screen.getByRole('button',{name:/우측 신장 Right kidney/}));
+ await waitFor(()=>expect(document.querySelector('.an-risk-panel').textContent).toContain('eGFR'));
+ fireEvent.change(screen.getByLabelText('단면 위치'),{target:{value:40}});
+ await user.click(screen.getByLabelText('실제 메시 절단'));
+ expect(screen.getByTestId('scene').textContent).toContain('40:true');
+ await user.click(screen.getByRole('button',{name:'우측 신장 숨기기'}));
+ expect(screen.getByRole('button',{name:'우측 신장 표시'})).toBeTruthy();
+ await user.click(screen.getByRole('button',{name:'RESET'}));
+ expect(screen.getByTestId('scene').textContent).toContain('reset');
+ await user.click(screen.getByRole('button',{name:/김하늘 34세/}));
+ await screen.findByTestId('scene');
+ expect(screen.getByText('0개 레이어 연결')).toBeTruthy();
+});
+test('simulation alerts remain reviewable with their own analysis identity',async()=>{
+ const user=userEvent.setup();render(<App/>);await screen.findByText('HIGH · 모델 고위험');
+ await user.selectOptions(screen.getByLabelText('추가 약물'),'ibuprofen');
+ await user.click(screen.getByRole('button',{name:'위험 비교'}));
+ await screen.findByText('이부프로펜 추가');
+ await user.click(screen.getByRole('tab',{name:'3D 해부학'}));await screen.findByTestId('scene');
+ expect(screen.getByLabelText(/시뮬레이션 결과 표시/).checked).toBe(true);
+ await user.click(screen.getByRole('button',{name:/혈관 · 전신 Vascular/}));
+ const panel=document.querySelector('.an-risk-panel');
+ await user.click(within(panel).getAllByRole('button',{name:/관련 경고 보기/})[0]);
+ await user.type(screen.getByLabelText('판단 근거 또는 확인 내용'),'시뮬레이션 장기 연결 확인');
+ await user.click(within(screen.getByRole('dialog')).getByRole('button',{name:'확인',exact:true}));
+ await screen.findByText('검토 기록을 저장했습니다. 처방은 변경되지 않았습니다.');
+});

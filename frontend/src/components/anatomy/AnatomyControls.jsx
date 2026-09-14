@@ -1,0 +1,4 @@
+import React from 'react';
+export default function AnatomyControls({mode,setMode,position,setPosition,clipping,setClipping,setView}){
+ return <div className="an-controls"><div className="an-control-row"><div className="an-segments">{['axial','coronal','sagittal'].map(m=><button key={m} aria-pressed={mode===m} onClick={()=>{setMode(m);setPosition(0)}}>{m.toUpperCase()}</button>)}</div><label><input type="checkbox" checked={clipping} onChange={e=>setClipping(e.target.checked)}/> 실제 메시 절단</label></div><label className="an-slider">단면 위치 <output>{position}</output><input aria-label="단면 위치" type="range" min="-100" max="100" value={position} onChange={e=>setPosition(Number(e.target.value))}/><small>상대 좌표</small></label><div className="an-camera">{['reset','front','back','left','right','top'].map(kind=><button key={kind} onClick={()=>setView({kind,nonce:Date.now()})}>{kind.toUpperCase()}</button>)}</div></div>;
+}
