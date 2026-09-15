@@ -58,6 +58,12 @@ class SimulationRequest(PatientRequest):
     drug_id: str
     dispenses: float | None = Field(default=1, ge=0, le=10000, allow_inf_nan=False)
 
+class FeedbackRequest(StrictModel):
+    analysis_id: str
+    alert_id: str
+    rating: Literal['useful','not_useful','incorrect','already_known','needs_more_information']
+    comment: str = Field(default='', max_length=500)
+
 class ReviewRequest(StrictModel):
     analysis_id: str
     alert_id: str

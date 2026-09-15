@@ -43,3 +43,22 @@
 .cp-error{background:#fff1ec;color:#9e493c;padding:10px 12px;border-radius:6px;font-size:.8125rem;margin:6px 0}
 .cp-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px;position:sticky;bottom:-24px;background:white;padding:14px 0 0}
 @media (max-width:720px){.custom-patient-drawer{width:100%}.cp-grid{grid-template-columns:1fr}}
+
+.gaps-card{background:white;border:1px solid var(--line);border-radius:10px;padding:21px;margin-top:22px}
+.gaps-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.gaps-list li{display:flex;align-items:center;gap:10px;font-size:.8125rem;color:#41616a}
+
+.brief-facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.brief-facts button{display:inline-flex;align-items:center;gap:5px;background:#f3f8f7;border:1px solid #d7e6e2;color:#2f5951;padding:7px 10px;border-radius:16px;font-size:.75rem}
+.brief-facts button:hover{background:#e6f2ef}
+
+.why-chain{list-style:none;margin:10px 0 0;padding:0;counter-reset:why}
+.why-chain li{counter-increment:why;position:relative;padding:10px 0 10px 30px;border-left:2px solid #cddeda;margin-left:9px}
+.why-chain li:last-child{border-left-color:transparent}
+.why-chain li::before{content:counter(why);position:absolute;left:-11px;top:8px;width:20px;height:20px;border-radius:50%;background:#087c6e;color:white;font-size:.6875rem;display:flex;align-items:center;justify-content:center}
+.why-chain b{display:block;font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;color:#6d838a}
+.why-chain span{display:block;font-size:.875rem;margin-top:3px;color:var(--ink)}
+
+.alt-info-tag{font-size:.6875rem;letter-spacing:.3px;color:#97651d;background:#fcf1dd;padding:7px 10px;border-radius:6px;margin:10px 0}
+.feedback-row{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 18px}
+.feedback-row button{font-size:.6875rem;padding:6px 9px}

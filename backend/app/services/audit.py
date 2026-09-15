@@ -12,10 +12,16 @@ class AuditStore:
             db.execute('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id TEXT NOT NULL, timestamp TEXT NOT NULL, event TEXT NOT NULL, detail TEXT NOT NULL)')
             db.execute('CREATE INDEX IF NOT EXISTS idx_events_patient_id_id ON events(patient_id,id)')
             db.execute('CREATE TABLE IF NOT EXISTS analyses (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, payload TEXT NOT NULL)')
+            # Append-only additions for user-linked audit (who did this, under which role). Nullable
+            # so every event recorded before this column existed still reads back fine.
+            for col in ('user_id','role'):
+                try:db.execute(f'ALTER TABLE events ADD COLUMN {col} TEXT')
+                except sqlite3.OperationalError:pass  # column already exists
     def connect(self):return sqlite3.connect(self.path,timeout=15)
-    def record(self,pid,event,detail):
+    def record(self,pid,event,detail,user_id=None,role=None):
         with self.connect() as db:
-            db.execute('INSERT INTO events(patient_id,timestamp,event,detail) VALUES(?,?,?,?)',(pid,datetime.now(timezone.utc).isoformat(),event,json.dumps(detail,ensure_ascii=False)))
+            db.execute('INSERT INTO events(patient_id,timestamp,event,detail,user_id,role) VALUES(?,?,?,?,?,?)',
+                       (pid,datetime.now(timezone.utc).isoformat(),event,json.dumps(detail,ensure_ascii=False),user_id,role))
     def save_analysis(self,payload):
         with self.connect() as db:
             db.execute('INSERT INTO analyses VALUES(?,?,?)',(payload['analysis_id'],payload['patient_id'],json.dumps(payload,ensure_ascii=False)))
@@ -25,5 +31,5 @@ class AuditStore:
         return json.loads(row[0]) if row else None
     def list(self,pid):
         with self.connect() as db:
-            rows=db.execute('SELECT id,timestamp,event,detail FROM events WHERE patient_id=? ORDER BY id DESC LIMIT 200',(pid,)).fetchall()
-        return [{'id':r[0],'timestamp':r[1],'event':r[2],'detail':json.loads(r[3])} for r in rows]
+            rows=db.execute('SELECT id,timestamp,event,detail,user_id,role FROM events WHERE patient_id=? ORDER BY id DESC LIMIT 200',(pid,)).fetchall()
+        return [{'id':r[0],'timestamp':r[1],'event':r[2],'detail':json.loads(r[3]),'user_id':r[4],'role':r[5]} for r in rows]

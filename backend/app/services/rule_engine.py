@@ -16,14 +16,40 @@ RULES_HASH = hashlib.sha256((DATA/'rules.json').read_bytes()).hexdigest()
 PAIRS = {frozenset((r['a'],r['b'])):(i,r) for i,r in enumerate(RULES['interactions'])}
 SEVERITY = {'NONE':0.,'MILD':.34,'MODERATE':.67,'SEVERE':1.,'UNKNOWN':0.}
 
+# Rule provenance/versioning. Every rule here is PROTOTYPE policy -- not sourced from an official
+# drug database, formulary, or clinical guideline -- and is labeled that way on every alert rather
+# than only once in documentation, so a clinician reviewing a single alert still sees it.
+CODE_RULE_VERSION = 'rule_engine.py@v1'
+EVIDENCE_LEVEL = 'PROTOTYPE RULE — NOT CLINICALLY VALIDATED'
+RULE_METADATA = {
+    'evidence_level': EVIDENCE_LEVEL,
+    'source': "SynexAgent internal prototype policy (backend/data/rules.json + build_dataset_v2/v3 audits); "
+              "not an official drug database, formulary, or clinical guideline",
+    'rules_version': RULES_HASH[:12],
+    'code_version': CODE_RULE_VERSION,
+    'clinical_owner': None,
+    'last_reviewed': None,
+}
+
+def _rule_id(source):
+    # Rules sourced from rules.json get a stable, human-readable id tied to their row; rules that
+    # are structural checks in code (polypharmacy, duplicate counts, ...) get none -- their
+    # provenance is the code_version below, not a versioned data row.
+    if source.startswith('rules.json / '):
+        return 'RULE-' + source.split(' / ',1)[1].replace('/','-').upper()
+    return None
+
 def make_alert(kind, severity, title, reason, drugs=(), source='SynexAgent prototype policy', training=False, evidence=None):
     key = json.dumps([kind,sorted(drugs),source,reason],ensure_ascii=False)
+    rule_id = _rule_id(source)
     return {'id':hashlib.sha256(key.encode()).hexdigest()[:16], 'type':kind,'severity':severity,
             'title':title,'reason':reason,'drugs':list(drugs),'source':source,
             'timestamp':datetime.now(timezone.utc).isoformat(), 'engine':'rule',
             'training_signal':training,'evidence':evidence or {},
             'evidence_status':'Prototype reference; clinician validation required',
-            'risk_effect':'Included in training-compatible counts' if training else 'Separate safety signal; not added to drug_conflict'}
+            'risk_effect':'Included in training-compatible counts' if training else 'Separate safety signal; not added to drug_conflict',
+            'rule_id':rule_id, 'rule_version':RULES_HASH[:12] if rule_id else CODE_RULE_VERSION,
+            'evidence_level':EVIDENCE_LEVEL}
 
 def evaluate(patient):
     active = [m for m in patient.medications if m.status=='active']
@@ -82,4 +108,5 @@ def evaluate(patient):
                 f'{lab.date}: {lab.value} {lab.unit}. 환자별 목표범위와 검사 시점·약물 연관성을 검토하십시오.',ds,
                 'Demo Observation / supplied reference range', evidence={'lab':lab.model_dump(mode='json')})
     alerts.sort(key=lambda a:({'danger':0,'caution':1,'info':2}[a['severity']],a['id']))
-    return {'alerts':alerts,'danger_count':danger,'caution_count':caution,'matched_ids':ids,'rules_sha256':RULES_HASH}
+    return {'alerts':alerts,'danger_count':danger,'caution_count':caution,'matched_ids':ids,'rules_sha256':RULES_HASH,
+            'rule_metadata':RULE_METADATA}
