@@ -7,13 +7,14 @@ import AnatomySlicePanel from './AnatomySlicePanel';
 import AnatomyLegend from './AnatomyLegend';
 import AnatomyConditionsPanel from './AnatomyConditionsPanel';
 import AnatomyImagingPanel from './AnatomyImagingPanel';
-import {DISCLAIMER,organs,targetsFor,severityFor,resolveSex,SEX_LABELS} from '../../data/anatomyMap';
+import {DISCLAIMER,organs,targetsFor,severityFor,resolveSex,SEX_LABELS,ANATOMY_ATTRIBUTION} from '../../data/anatomyMap';
 import './anatomy.css';
 import {AnatomyAssets,useAnatomyAssetStatus} from './AnatomyAssets';
+import {AnatomyExtras} from './AnatomyExtrasAssets';
 const AnatomyScene=lazy(()=>import('./AnatomyScene'));
 
 function AnatomyWorkspace({patient,analysis,simulation,onOpenAlert,focus,catalog}){
- const [useSimulation,setUseSimulation]=useState(!!simulation),[selected,setSelected]=useState(null),[hidden,setHidden]=useState({skeleton:true}),[checked,setChecked]=useState(new Set());
+ const [useSimulation,setUseSimulation]=useState(!!simulation),[selected,setSelected]=useState(null),[hidden,setHidden]=useState({skeleton:true,vascularFull:true}),[checked,setChecked]=useState(new Set());
  const [mode,setMode]=useState('axial'),[position,setPosition]=useState(0),[clipping,setClipping]=useState(false),[view,setView]=useState({kind:'reset'}),[reduced,setReduced]=useState(false);
  const [bodyOpacity,setBodyOpacity]=useState(55),[activePreset,setActivePreset]=useState(null),[showLabels,setShowLabels]=useState(false);
  const [imagingOpen,setImagingOpen]=useState(false),[fullscreen,setFullscreen]=useState(false);
@@ -71,7 +72,7 @@ function AnatomyWorkspace({patient,analysis,simulation,onOpenAlert,focus,catalog
  <div className="an-layout">
   <AnatomyOrganList {...{selected,choose,hidden,setHidden,data,checked,setChecked,setView}}/>
   <div className="an-center">
-   <div className="an-viewport"><div className="an-viewport-title">01 / 3D ANATOMY <span>PROCEDURAL REFERENCE{sex?` · ${SEX_LABELS[sex].toUpperCase()}`:''}</span></div>
+   <div className="an-viewport"><div className="an-viewport-title">01 / 3D ANATOMY <span>{assetStatus==='loaded'?'BODYPARTS3D · ADULT REFERENCE':'PROCEDURAL REFERENCE'}{sex?` · ${SEX_LABELS[sex].toUpperCase()}`:''}</span></div>
     <Suspense fallback={<div className="an-loading">Loading anatomical model…</div>}>
      <AnatomyScene {...{selected,choose,hidden,data,mode,position,clipping,view,reduced,sex,bodyOpacity,showLabels,demoImagingOpen:imagingOpen}}/>
     </Suspense>
@@ -90,10 +91,11 @@ function AnatomyWorkspace({patient,analysis,simulation,onOpenAlert,focus,catalog
   </aside>
  </div>
  <footer className="an-bottom">가상 환자 · 절차적 참고 모델 · CT / MRI 미연결 · 병변 위치 추정 없음</footer>
+ {assetStatus==='loaded'&&<p className="an-attribution">{ANATOMY_ATTRIBUTION}</p>}
  </div>;
 }
 
 export default function AnatomyWithAssets(props){
  const sex=resolveSex(props.patient?.sex);
- return <AnatomyAssets sex={sex}><AnatomyWorkspace {...props}/></AnatomyAssets>;
+ return <AnatomyAssets sex={sex}><AnatomyExtras><AnatomyWorkspace {...props}/></AnatomyExtras></AnatomyAssets>;
 }

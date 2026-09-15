@@ -21,7 +21,8 @@ export const organs = [
 // procedural body/skeleton shell -- never deleted, never affects patient data.
 export const pseudoLayers=[
  {id:'body',ko:'신체',en:'Body'},
- {id:'skeleton',ko:'골격',en:'Skeleton'}
+ {id:'skeleton',ko:'골격',en:'Skeleton'},
+ {id:'vascularFull',ko:'전신 혈관',en:'Vascular (full)'}
 ];
 export const colors={danger:'#ef7278',caution:'#edb45f',info:'#69d9d4',imaging:'#b48be0',none:'#8ba9ad'};
 export const labels={danger:'위험 관련성',caution:'주의 관련성',info:'기록 관련성',imaging:'영상 소견',none:'연결된 신호 없음'};
@@ -77,3 +78,15 @@ export const ORGAN_LABS={
 export const CONDITION_ICD10={
  '고혈압':'I10','만성신부전':'N18.9','고칼륨혈증':'E87.5','심방세동':'I48.91'
 };
+
+// Real full-body skeleton/vascular tree merged from BodyParts3D (extras.glb, see
+// AnatomyExtrasAssets.jsx). It is an additional optional layer on top of the 10 organs above --
+// it never repositions or replaces spine/vascular or any other organ mesh/logic. BodyParts3D
+// ships in millimetres with a Z-up axis convention; this single transform (tuned by visual
+// inspection against the existing organ placement, not computed) converts the merged mesh into
+// this app's Y-up model-unit space. See frontend/public/models/anatomy/README.md.
+export const extrasTransform={scale:.00522,position:[0,-4.49,-.53],rotation:[-Math.PI/2,0,0]};
+
+// Required attribution for BodyParts3D-derived meshes (organs + extras). Must stay visible on
+// screen whenever a GLB asset is loaded -- do not remove.
+export const ANATOMY_ATTRIBUTION='BodyParts3D, © Database Center for Life Science, CC BY-SA 2.1 Japan';

@@ -108,9 +108,19 @@ ASCII 키워드에는 단어 경계를 적용해 AST가 last, GI가 digoxin에 �
 
 추가된 장기: 췌장(pancreas), 비장(spleen), 방광(bladder), 소장(smallIntestine), 대장(largeIntestine). `backend/data/anatomy_mapping.json`에 대응 키워드를 추가했습니다.
 
+## 실제 BodyParts3D 데이터 파이프라인 (3단계)
+
+`frontend/public/models/anatomy/anatomy.glb`, `extras.glb`가 설정되어 있으면(둘 다 `.env.local`, 기본 build artifact라 저장소에는 커밋하지 않음) 아래가 절차적 모델을 대체합니다. 실제 BodyParts3D 4.3(DBCLS Anatomography, CC BY-SA 2.1 Japan) mesh를 `build_real_anatomy.py`가 organ별로 병합해 만듭니다 — 자세한 재생성 절차와 mesh 이름 목록은 `frontend/public/models/anatomy/README.md` 참고.
+
+- **장기 10종**(`anatomy.glb`): brain, rightLung, leftLung, heart, liver, stomach, rightKidney, leftKidney, vascular, spine. 하나라도 없으면 그 장기만 절차적 형상으로 대체됩니다(전체가 되돌아가지 않음, `AnatomyAssets.jsx`).
+- **전신 골격/혈관/피부**(`extras.glb`): `skeletonFull`(약 365개 뼈 mesh 병합), `vascularFull`(약 1466개 혈관 mesh 병합), `skinBody`(전신 피부 단일 mesh, FMA55665). 각각 독립적으로 optional이며 `AnatomyModel.jsx`의 `Skeleton`/`VascularFull`/`RealBodyShell`이 있으면 사용하고 없으면 기존 절차적 형상(Torso/Shell/Limb, 뼈대 primitive)으로 대체합니다.
+- 좌측 레이어 목록의 Body/Skeleton 토글은 그대로 유지되며, 추가로 "전신 혈관(Vascular (full))" pseudo-layer가 생깁니다. 기존 10개 장기의 위치(`organs`의 `p`/`s`)나 클릭/강조 로직은 이 작업으로 전혀 바뀌지 않았습니다 — `extras.glb`는 별도 좌표 변환(`anatomyMap.js`의 `extrasTransform`, scale/position/rotation 한 벌)으로 기존 장기 배치에 맞춰 정렬됩니다.
+- 화면 하단에 CC BY-SA 2.1 Japan 필수 표기(`ANATOMY_ATTRIBUTION`)가 실제 GLB 로드 시 자동으로 나타납니다.
+- 이 데이터는 여전히 한 명의 참고 성인 표본이며 환자별 segmentation이 아닙니다. `VITE_ANATOMY_MODEL_URL_MALE`/`_FEMALE`로 성별을 구분한 장기 GLB는 계속 지원하지만, `skinBody`(피부 실루엣)는 성별 구분 없는 단일 참고 모델입니다.
+
 ## 현재 범위와 확장 지점
 
-현재 모델은 직접 만든 **procedural/basic anatomy placeholder**입니다. 장기 메시를 감싸는 반투명 인체 실루엣(머리·목·몸통·골반·팔·다리)도 같은 방식의 절차적 참고 형상이며, 장기 분리·선택·위험 연결·실제 절단 기능은 동작하지만 레퍼런스 영상과 같은 정밀 해부학 GLB 또는 CT 재구성은 아닙니다. 실제 CT/MRI/DICOM, 종양·출혈 위치, 환자 영상·segmentation은 포함하지 않습니다. 단면의 상대 좌표는 mm가 아니며, 절단면 표면 캡을 생성하지 않으므로 잘린 메시 내부는 열린 형태입니다.
+기본값(설정 없음)은 여전히 직접 만든 **procedural/basic anatomy placeholder**입니다. 실제 BodyParts3D GLB(`anatomy.glb`/`extras.glb`)가 설정되어 있으면 위 "실제 BodyParts3D 데이터 파이프라인" 절을 따라 대체되고, 없거나 로드에 실패하면 절차적 참고 형상으로 자동 대체됩니다. 어느 경우든 실제 CT/MRI/DICOM, 종양·출혈 위치, 환자별 영상·segmentation은 포함하지 않습니다. 단면의 상대 좌표는 mm가 아니며, 절단면 표면 캡을 생성하지 않으므로 잘린 메시 내부는 열린 형태입니다.
 
 정밀 GLB 교체 위치와 필수 mesh 이름은 `frontend/public/models/anatomy/README.md`를 참고하십시오. 모델 파일이 없거나 형식이 맞지 않으면 기본 모델로 대체합니다. 제3자 장기 모델은 번들에 포함하지 않았습니다. 폰트 라이선스는 `docs/licenses/Noto-Sans-KR-OFL.txt`에 포함했습니다.
 

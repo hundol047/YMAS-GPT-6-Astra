@@ -5,7 +5,16 @@ __pycache__/
 node_modules/
 frontend/dist/
 .env
+.env.local
+.env.test.local
 *.sqlite3*
 *.engine
 *.log
 .sites-runtime/
+
+# Generated BodyParts3D GLB assets (large binaries, reproducible via build_real_anatomy.py).
+# Real license text stays in frontend/public/models/anatomy/README.md, tracked regardless.
+frontend/public/models/anatomy/*.glb
+/anatomy.glb
+/extras.glb
+bp3d_repo

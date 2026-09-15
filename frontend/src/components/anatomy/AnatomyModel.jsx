@@ -3,8 +3,9 @@ import {useFrame} from '@react-three/fiber';
 import {DoubleSide} from 'three';
 import {makeGeometry,buildTorsoLathe} from './geometry';
 import {useAnatomyAssets} from './AnatomyAssets';
+import {useAnatomyExtras} from './AnatomyExtrasAssets';
 import {Line,Html} from '@react-three/drei';
-import {organs,colors,labels,targetsFor,severityFor,BODY_PROFILES} from '../../data/anatomyMap';
+import {organs,colors,labels,targetsFor,severityFor,BODY_PROFILES,extrasTransform} from '../../data/anatomyMap';
 
 // Original shaped surfaces: deliberately a reference model, not segmentation.
 const Organ=memo(function Organ({organ,selected,choose,severity,targets,planes,reduced,dim,showLabels,onHover,demoImagingOpen}){
@@ -58,6 +59,20 @@ function Torso({profile,planes,opacity}){
   <meshPhysicalMaterial color={SKIN} transparent opacity={opacity} roughness={.36} depthWrite={false} clippingPlanes={planes} side={DoubleSide}/>
  </mesh>;
 }
+// Real BodyParts3D whole-body skin surface (single mesh, FMA55665 "Skin", ~203k faces) --
+// replaces the whole procedural sphere-head/capsule-limb shell (Torso+head+neck+Limb below) when
+// available. It's a single reference-body scan, not sex-differentiated, so BODY_PROFILES stops
+// shaping the visible skin once this is loaded; organ placement/logic and the sex-specific torso
+// fallback are unaffected either way. Falls back to the procedural shell when extras.glb isn't
+// configured or doesn't include a "skinBody" mesh.
+function RealBodyShell({planes,opacity}){
+ const extras=useAnatomyExtras();
+ return <group position={extrasTransform.position} rotation={extrasTransform.rotation} scale={extrasTransform.scale}>
+  <mesh name="skinBody" geometry={extras.skinBody} raycast={()=>null}>
+   <meshPhysicalMaterial color={SKIN} transparent opacity={opacity} roughness={.36} depthWrite={false} clippingPlanes={planes} side={DoubleSide}/>
+  </mesh>
+ </group>;
+}
 function Limb({side,planes,limbScale,shoulderX,hipX}){
  const s=side,k=limbScale,armX=shoulderX/1.22,legX=hipX/.55;
  return <group>
@@ -74,8 +89,9 @@ function Limb({side,planes,limbScale,shoulderX,hipX}){
  </group>;
 }
 // Simplified skeleton layer (skull outline, ribcage rings, pelvis ring, long bones). A separate
-// togglable reference layer -- not a CT-derived skeletal reconstruction.
-function Skeleton({planes,profile}){
+// togglable reference layer -- not a CT-derived skeletal reconstruction. Used only as a fallback
+// when the real BodyParts3D full-body skeleton mesh (extras.glb) isn't available.
+function ProceduralSkeleton({planes,profile}){
  const armX=profile.shoulderX/1.22,legX=profile.hipX/.55;
  return <group>
   <Shell shape="sphere" args={[.42*profile.headScale,16,12]} position={[0,3.46,.02]} color={BONE} opacity={.5} planes={planes}/>
@@ -89,18 +105,46 @@ function Skeleton({planes,profile}){
   </group>)}
  </group>;
 }
+// Real BodyParts3D full-body skeleton, merged (original relative bone positions preserved) into
+// a single mesh at build time -- see build_real_anatomy.py / AnatomyExtrasAssets.jsx. Falls back
+// to the procedural skeleton above when extras.glb isn't configured or failed to load.
+function Skeleton({planes,profile}){
+ const extras=useAnatomyExtras();
+ if(!extras.skeletonFull)return <ProceduralSkeleton planes={planes} profile={profile}/>;
+ return <group position={extrasTransform.position} rotation={extrasTransform.rotation} scale={extrasTransform.scale}>
+  <mesh geometry={extras.skeletonFull} raycast={()=>null}>
+   <meshStandardMaterial color={BONE} roughness={.55} transparent opacity={.7} depthWrite={false} clippingPlanes={planes} side={DoubleSide}/>
+  </mesh>
+ </group>;
+}
+// Real BodyParts3D full-body arterial/venous tree, merged the same way. Optional layer -- only
+// rendered when both extras.glb is loaded and the "Vascular (full)" layer is shown; no
+// procedural fallback since the existing 'vascular' organ already covers that case.
+function VascularFull({planes}){
+ const extras=useAnatomyExtras();
+ if(!extras.vascularFull)return null;
+ return <group position={extrasTransform.position} rotation={extrasTransform.rotation} scale={extrasTransform.scale}>
+  <mesh geometry={extras.vascularFull} raycast={()=>null}>
+   <meshStandardMaterial color="#a83f4d" roughness={.5} transparent opacity={.4} depthWrite={false} clippingPlanes={planes} side={DoubleSide}/>
+  </mesh>
+ </group>;
+}
 export default function AnatomyModel({selected,choose,hidden,data,planes,reduced,sex,bodyOpacity,showLabels,onHoverOrgan,demoImagingOpen}){
  const profile=BODY_PROFILES[sex||'unspecified'];
  const opacity=Math.min(1,Math.max(0,(bodyOpacity??55)/100));
+ const extras=useAnatomyExtras();
  return <group>
- {!hidden.body&&<>
-  <Torso profile={profile} planes={planes} opacity={opacity}/>
-  <Shell shape="sphere" args={[.58*profile.headScale,32,24]} position={[0,3.5,.04]} opacity={opacity} planes={planes}/>
-  <Shell shape="cylinder" args={[.2,.28,.5,24]} position={[0,2.92,-.05]} opacity={opacity} planes={planes}/>
-  <Limb side={-1} planes={planes} limbScale={profile.limbScale} shoulderX={profile.shoulderX} hipX={profile.hipX}/>
-  <Limb side={1} planes={planes} limbScale={profile.limbScale} shoulderX={profile.shoulderX} hipX={profile.hipX}/>
- </>}
+ {!hidden.body&&(extras.skinBody
+  ?<RealBodyShell planes={planes} opacity={opacity}/>
+  :<>
+   <Torso profile={profile} planes={planes} opacity={opacity}/>
+   <Shell shape="sphere" args={[.58*profile.headScale,32,24]} position={[0,3.5,.04]} opacity={opacity} planes={planes}/>
+   <Shell shape="cylinder" args={[.2,.28,.5,24]} position={[0,2.92,-.05]} opacity={opacity} planes={planes}/>
+   <Limb side={-1} planes={planes} limbScale={profile.limbScale} shoulderX={profile.shoulderX} hipX={profile.hipX}/>
+   <Limb side={1} planes={planes} limbScale={profile.limbScale} shoulderX={profile.shoulderX} hipX={profile.hipX}/>
+  </>)}
  {!hidden.skeleton&&<Skeleton planes={planes} profile={profile}/>}
+ {!hidden.vascularFull&&<VascularFull planes={planes}/>}
  {organs.filter(o=>!hidden[o.id]).map(o=>{
   const targets=targetsFor(data,o.group);
   return <Organ key={o.id} organ={o} selected={selected===o.id} dim={!!selected&&selected!==o.id} choose={choose}

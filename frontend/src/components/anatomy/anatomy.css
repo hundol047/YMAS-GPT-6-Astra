@@ -10,6 +10,7 @@
 .an-twin-tag{font-size:8px;letter-spacing:1.4px;color:#79bcb8;border:1px solid #2e5357;padding:4px 8px;border-radius:20px}
 .an-twin-header b{font-size:13px;color:#e7f2f4}
 .an-sex-warning{margin:0 22px 12px;padding:9px 12px;background:#3a3021;color:#e6c48b;border-radius:6px;font-size:10.5px;line-height:1.7}
+.an-attribution{font-size:9px;color:#5f818d;padding:0 20px 12px;margin:0}
 
 .an-layer-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
 .an-layer-toolbar button{font-size:8.5px;padding:6px 4px}
