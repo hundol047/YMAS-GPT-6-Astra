@@ -12,9 +12,9 @@ frontend/dist/
 *.log
 .sites-runtime/
 
-# Generated BodyParts3D GLB assets (large binaries, reproducible via build_real_anatomy.py).
-# Real license text stays in frontend/public/models/anatomy/README.md, tracked regardless.
-frontend/public/models/anatomy/*.glb
+# Root-level intermediate copies from build_real_anatomy.py (the served copies under
+# frontend/public/models/anatomy/*.glb are tracked -- see that folder's README.md for how
+# to regenerate them).
 /anatomy.glb
 /extras.glb
 bp3d_repo
