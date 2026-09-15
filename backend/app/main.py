@@ -16,6 +16,9 @@ from .services.data_quality import assess as assess_data_quality
 from .services.cds_hooks import SERVICES_DOC, build_cards
 from .services.smart_launch import build_authorize_redirect, exchange_code
 from .services.auth import get_current_user, require, User
+from .services.validation import alert_type_breakdown, alert_fatigue_metrics
+from .services.imaging_pipeline import health as imaging_health
+from .services.rule_engine import RULE_METADATA
 from fastapi import Depends
 from fastapi.responses import RedirectResponse
 
@@ -59,6 +62,26 @@ def save_analysis(result,event='analysis_completed'):
 
 @app.get('/health')
 def health():return {'status':'ok','demo':True,**app.state.engine.health()}
+
+@app.get('/health/subsystems')
+def health_subsystems():
+    """Per-subsystem status for observability. Degraded-mode by design: a subsystem being
+    not_configured/degraded never crashes this endpoint or the app -- see each try/except below.
+    No patient data is included in this response."""
+    emr_mode=os.getenv('EMR_MODE','demo').lower()
+    try:
+        model=app.state.engine.health()
+        model_status='ok' if model['model_loaded'] else 'degraded'
+    except Exception as e:
+        model={'error':str(e)};model_status='down'
+    return {
+        'emr':{'status':'ok','mode':emr_mode,'adapter':type(app.state.adapter).__name__},
+        'terminology':{'status':'ok','note':'fixed reference tables; see services/terminology_mapper.py'},
+        'rule_engine':{'status':'ok','rules_version':RULE_METADATA['rules_version'],'evidence_level':RULE_METADATA['evidence_level']},
+        'ai_model':{'status':model_status,**model},
+        'auth':{'status':'ok','mode':os.getenv('AUTH_MODE','demo').lower()},
+        'imaging':imaging_health(),
+    }
 
 @app.get('/catalog')
 def catalog():return CATALOG
@@ -161,6 +184,18 @@ def feedback(req:FeedbackRequest,user:User=Depends(require('feedback:submit'))):
 
 @app.get('/whoami')
 def whoami(user:User=Depends(get_current_user)):return {'user_id':user.id,'role':user.role}
+
+@app.get('/validation/alert-breakdown')
+def validation_alert_breakdown():
+    try:cohort=app.state.adapter.list()
+    except NotImplementedError as e:raise HTTPException(501,str(e))
+    return alert_type_breakdown(app.state.agent,cohort)
+
+@app.get('/validation/alert-fatigue')
+def validation_alert_fatigue():
+    try:cohort=[p.id for p in app.state.adapter.list()]
+    except NotImplementedError as e:raise HTTPException(501,str(e))
+    return alert_fatigue_metrics(app.state.audit,cohort)
 
 @app.get('/audit/{pid}')
 def audit(pid:str):patient(pid);return app.state.audit.list(pid)

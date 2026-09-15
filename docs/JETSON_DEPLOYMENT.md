@@ -1,5 +1,12 @@
 # Jetson Orin 배포 경로
 
+## 새로 추가된 도구 (AGX Orin 확정 이후)
+
+- `scripts/verify_jetson_agx_gpu.py`: 명세된 감지 명령(`/proc/device-tree/model`, `nv_tegra_release`, `nvidia-l4t-core`, CUDA/cuDNN/TensorRT 패키지, Docker)을 그대로 실행하고, 실제 ONNX 모델로 추론까지 수행한 뒤 `TensorrtExecutionProvider`/`CUDAExecutionProvider`가 `available_providers` **와** `session_providers` 양쪽에 모두 있고 추론이 성공했을 때만 "GPU ACCELERATION VERIFIED"를 출력합니다. 이 저장소의 개발 컨테이너는 x86_64라 항상 `hardware_is_agx_orin: false` + CPU SAFE MODE로 나옵니다 — 실제 장치에서 실행해야 의미 있는 값이 나옵니다.
+- `config/jetson_agx_orin_profiles.json`: JetPack/L4T/CUDA/cuDNN/TensorRT/Docker 베이스 이미지 조합별 배포 프로파일. 이번 작업에서는 `verified:true`인 프로파일을 하나도 채우지 않았습니다 — 실제 장치에서 `verify_jetson_agx_gpu.py`를 실행한 결과로만 채워야 합니다.
+- `scripts/deploy_jetson_agx.sh`: 감지 → 프로파일 매칭(미검증 조합이면 무조건 CPU Safe Mode) → (가능하면) Docker 빌드 → 서버 기동 → `/health` 확인 → provider 검증 → 상태 출력까지 한 번에 수행합니다. 이 개발 컨테이너에서 실행하면 CPU Safe Mode 경로가 끝까지 성공하는 것을 확인했습니다; GPU 빌드 경로는 실제 AGX Orin이 아니면 도달하지 않습니다.
+- `scripts/benchmark_jetson.py`: warmup/short/sustained 3단계로 실제 지연시간(avg/p50/p95/min/max)과 처리량을 측정합니다. 이 호스트에는 CUDA/TensorRT가 없으므로 해당 provider는 `available:false`로만 표시되고 숫자를 채우지 않습니다 — 가짜 벤치마크 수치를 생성하지 않습니다. `tegrastats`/`nvpmodel`은 실제 Jetson에서만 값이 채워집니다.
+
 ## 현재 검증 범위
 
 일반 Linux x86_64의 ONNX Runtime CPU에서 모델 로드와 API 테스트를 수행했습니다. Jetson 하드웨어·TensorRT 엔진 성능·MONAI/Clara 배포는 검증하지 않았습니다. 이 모델은 구조화 데이터 MLP이며 영상 전처리 프레임워크가 필요하지 않아 MONAI를 실행 의존성에 추가하지 않았습니다.
