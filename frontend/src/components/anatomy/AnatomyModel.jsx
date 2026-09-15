@@ -1,61 +1,112 @@
-import React,{memo,useMemo,useRef} from 'react';
+import React,{memo,useMemo,useRef,useState} from 'react';
 import {useFrame} from '@react-three/fiber';
 import {DoubleSide} from 'three';
-import {makeGeometry} from './geometry';
+import {makeGeometry,buildTorsoLathe} from './geometry';
 import {useAnatomyAssets} from './AnatomyAssets';
 import {Line,Html} from '@react-three/drei';
-import {organs,colors,labels,targetsFor,severityFor} from '../../data/anatomyMap';
+import {organs,colors,labels,targetsFor,severityFor,BODY_PROFILES} from '../../data/anatomyMap';
 
 // Original shaped surfaces: deliberately a reference model, not segmentation.
-const Organ=memo(function Organ({organ,selected,choose,severity,planes,reduced,dim}){
+const Organ=memo(function Organ({organ,selected,choose,severity,targets,planes,reduced,dim,showLabels,onHover,demoImagingOpen}){
  const assets=useAnatomyAssets();
  const geometry=useMemo(()=>assets[organ.id]?.clone()||makeGeometry(organ),[organ,assets]),mat=useRef();
+ const [hovered,setHovered]=useState(false);
  React.useEffect(()=>()=>geometry.dispose(),[geometry]);
  const color=severity==='none'?organ.color:colors[severity];
+ const primaryMarker=selected||severity==='danger';
  useFrame(({clock})=>{if(mat.current)mat.current.emissiveIntensity=severity==='danger'&&!reduced? .22+.12*Math.sin(clock.elapsedTime*2):severity==='none'?.02:.18;});
+ const latestLab=useMemo(()=>{
+  const labs=(targets||[]).flatMap(t=>t.sources.filter(s=>s.type==='lab'));
+  return [...labs].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).at(-1);
+ },[targets]);
  return <group position={organ.p}>
- <mesh name={organ.id} scale={organ.s} geometry={geometry} onClick={e=>{e.stopPropagation();choose(organ.id)}} onDoubleClick={e=>{e.stopPropagation();choose(organ.id)}}>
+ <mesh name={organ.id} scale={organ.s} geometry={geometry}
+  onClick={e=>{e.stopPropagation();choose(organ.id)}}
+  onDoubleClick={e=>{e.stopPropagation();choose(organ.id)}}
+  onPointerOver={e=>{e.stopPropagation();setHovered(true);onHover?.(organ.id)}}
+  onPointerOut={e=>{setHovered(false);onHover?.(null)}}>
  <meshStandardMaterial ref={mat} color={color} emissive={color} roughness={.63} transparent opacity={selected?.94:dim?.2:.46} depthWrite={selected} side={DoubleSide} clippingPlanes={planes}/>
  </mesh>
- {(selected||severity==='caution')&&<mesh scale={organ.s.map(v=>v*1.028)} geometry={geometry} raycast={()=>null}><meshBasicMaterial color={selected?'#a8f9ed':colors.caution} transparent opacity={.17} wireframe clippingPlanes={planes}/></mesh>}
- {(selected||severity==='danger')&&<><Line points={[[0,0,0],[.55,.3,.2],[.95,.3,.2]]} color={color} lineWidth={1}/><Html position={[.96,.3,.2]} style={{pointerEvents:'none'}}><div className="an-marker"><b>{organ.en}</b><span>{organ.ko} · {labels[severity]}</span></div></Html></>}
+ {(selected||hovered)&&<mesh scale={organ.s.map(v=>v*1.05)} geometry={geometry} raycast={()=>null}><meshBasicMaterial color={selected?'#a8f9ed':'#eaf6ff'} transparent opacity={selected?.2:.15} wireframe clippingPlanes={planes}/></mesh>}
+ {(!selected&&severity==='caution')&&<mesh scale={organ.s.map(v=>v*1.028)} geometry={geometry} raycast={()=>null}><meshBasicMaterial color={colors.caution} transparent opacity={.17} wireframe clippingPlanes={planes}/></mesh>}
+ {primaryMarker&&<><Line points={[[0,0,0],[.55,.3,.2],[.95,.3,.2]]} color={color} lineWidth={1}/><Html position={[.96,.3,.2]} style={{pointerEvents:'none'}} distanceFactor={9}><div className="an-marker"><b>{organ.en}</b><span>{organ.ko} · {labels[severity]}</span></div></Html></>}
+ {!primaryMarker&&hovered&&<Html position={[0,organ.s[1]*1.2+.12,0]} style={{pointerEvents:'none'}} distanceFactor={9}><div className="an-tooltip"><b>{organ.ko}</b><small>{organ.en}</small><span>Clinical signals: {(targets||[]).length}</span>{latestLab&&<span>Latest related lab: {latestLab.name}</span>}<span>Imaging: {demoImagingOpen?'데모 참고 영상':'참고 영상 없음'}</span></div></Html>}
+ {!primaryMarker&&!hovered&&showLabels&&<Html position={[0,organ.s[1]*1.15+.08,0]} style={{pointerEvents:'none'}} distanceFactor={9}><div className="an-label">{organ.ko}</div></Html>}
  </group>;
 });
-// Translucent humanoid silhouette: a body-shaped shell (head/neck/torso/pelvis/limbs) that
-// holds the organ meshes in place, so the scene reads as a human figure rather than free-floating organs.
-const SKIN='#d9b593';
+
+// Translucent humanoid silhouette: a sex-aware body-shaped shell (head/neck/torso/limbs) that
+// holds the organ meshes in place. The torso is a single continuous lathed surface through
+// anatomyMap.BODY_PROFILES control points so male/female read as genuinely different silhouettes
+// (shoulder:hip ratio, waist taper) rather than one primitive scaled by width. This remains an
+// original procedural reference figure, not a licensed scan -- see docs/ANATOMY.md for the GLB
+// replacement path (frontend/public/models/anatomy/{male,female}/*.glb).
+const SKIN='#d9b593',BONE='#eee7d8';
 function Shell({shape,args,position,rotation,planes,opacity=.11,color=SKIN}){
  return <mesh position={position} rotation={rotation} raycast={()=>null}>
  {shape==='sphere'&&<sphereGeometry args={args}/>}
  {shape==='cylinder'&&<cylinderGeometry args={args}/>}
  {shape==='box'&&<boxGeometry args={args}/>}
- <meshPhysicalMaterial color={color} transparent opacity={opacity} roughness={.38} depthWrite={false} clippingPlanes={planes}/>
+ {shape==='torus'&&<torusGeometry args={args}/>}
+ <meshPhysicalMaterial color={color} transparent opacity={opacity} roughness={.38} depthWrite={false} clippingPlanes={planes} side={DoubleSide}/>
  </mesh>;
 }
-function Limb({side,planes}){
- const s=side;
+function Torso({profile,planes,opacity}){
+ const geometry=useMemo(()=>buildTorsoLathe(profile.torso),[profile]);
+ React.useEffect(()=>()=>geometry.dispose(),[geometry]);
+ return <mesh geometry={geometry} scale={[1,1,profile.depthRatio]} raycast={()=>null}>
+  <meshPhysicalMaterial color={SKIN} transparent opacity={opacity} roughness={.36} depthWrite={false} clippingPlanes={planes} side={DoubleSide}/>
+ </mesh>;
+}
+function Limb({side,planes,limbScale,shoulderX,hipX}){
+ const s=side,k=limbScale,armX=shoulderX/1.22,legX=hipX/.55;
  return <group>
-  <Shell shape="sphere" args={[.19,16,12]} position={[s*1.22,2.02,-.05]} planes={planes}/>
-  <Shell shape="cylinder" args={[.18,.15,1.05,16]} position={[s*1.28,1.45,-.03]} rotation={[0,0,s*-.09]} planes={planes}/>
-  <Shell shape="sphere" args={[.15,16,12]} position={[s*1.34,.9,0]} planes={planes}/>
-  <Shell shape="cylinder" args={[.14,.105,1,16]} position={[s*1.3,.35,.02]} rotation={[0,0,s*-.05]} planes={planes}/>
-  <Shell shape="sphere" args={[.14,16,12]} position={[s*1.27,-.28,.05]} planes={planes}/>
-  <Shell shape="sphere" args={[.26,16,12]} position={[s*.52,-1.55,-.05]} planes={planes}/>
-  <Shell shape="cylinder" args={[.27,.21,1.55,16]} position={[s*.55,-2.35,-.05]} planes={planes}/>
-  <Shell shape="sphere" args={[.19,16,12]} position={[s*.56,-3.12,-.03]} planes={planes}/>
-  <Shell shape="cylinder" args={[.19,.13,1.5,16]} position={[s*.57,-3.9,0]} planes={planes}/>
-  <Shell shape="box" args={[.28,.16,.62]} position={[s*.58,-4.68,.22]} planes={planes}/>
+  <Shell shape="sphere" args={[.19*k,16,12]} position={[s*1.22*armX,2.02,-.05]} planes={planes}/>
+  <Shell shape="cylinder" args={[.18*k,.15*k,1.05,16]} position={[s*1.28*armX,1.45,-.03]} rotation={[0,0,s*-.09]} planes={planes}/>
+  <Shell shape="sphere" args={[.15*k,16,12]} position={[s*1.34*armX,.9,0]} planes={planes}/>
+  <Shell shape="cylinder" args={[.14*k,.105*k,1,16]} position={[s*1.3*armX,.35,.02]} rotation={[0,0,s*-.05]} planes={planes}/>
+  <Shell shape="sphere" args={[.14*k,16,12]} position={[s*1.27*armX,-.28,.05]} planes={planes}/>
+  <Shell shape="sphere" args={[.26*k,16,12]} position={[s*.52*legX,-1.55,-.05]} planes={planes}/>
+  <Shell shape="cylinder" args={[.27*k,.21*k,1.55,16]} position={[s*.55*legX,-2.35,-.05]} planes={planes}/>
+  <Shell shape="sphere" args={[.19*k,16,12]} position={[s*.56*legX,-3.12,-.03]} planes={planes}/>
+  <Shell shape="cylinder" args={[.19*k,.13*k,1.5,16]} position={[s*.57*legX,-3.9,0]} planes={planes}/>
+  <Shell shape="box" args={[.28*k,.16*k,.62*k]} position={[s*.58*legX,-4.68,.22]} planes={planes}/>
  </group>;
 }
-export default function AnatomyModel({selected,choose,hidden,data,planes,reduced}){
+// Simplified skeleton layer (skull outline, ribcage rings, pelvis ring, long bones). A separate
+// togglable reference layer -- not a CT-derived skeletal reconstruction.
+function Skeleton({planes,profile}){
+ const armX=profile.shoulderX/1.22,legX=profile.hipX/.55;
  return <group>
- <mesh position={[0,.53,-.1]} scale={[1.38,2.36,.7]} raycast={()=>null}><sphereGeometry args={[1,40,32]}/><meshPhysicalMaterial color={SKIN} transparent opacity={.1} roughness={.35} depthWrite={false} clippingPlanes={planes}/></mesh>
- <mesh position={[0,-1.55,-.05]} scale={[.85,.55,.62]} raycast={()=>null}><sphereGeometry args={[1,24,20]}/><meshPhysicalMaterial color={SKIN} transparent opacity={.11} roughness={.35} depthWrite={false} clippingPlanes={planes}/></mesh>
- <Shell shape="sphere" args={[.5,32,24]} position={[0,3.42,.04]} planes={planes}/>
- <Shell shape="cylinder" args={[.2,.28,.5,24]} position={[0,2.92,-.05]} opacity={.13} planes={planes}/>
- <Limb side={-1} planes={planes}/>
- <Limb side={1} planes={planes}/>
- {organs.filter(o=>!hidden[o.id]).map(o=><Organ key={o.id} organ={o} selected={selected===o.id} dim={!!selected&&selected!==o.id} choose={choose} severity={severityFor(targetsFor(data,o.group))} planes={planes} reduced={reduced}/>)}
+  <Shell shape="sphere" args={[.42*profile.headScale,16,12]} position={[0,3.46,.02]} color={BONE} opacity={.5} planes={planes}/>
+  {[2.35,2.0,1.65,1.3].map((y,i)=><Shell key={y} shape="torus" args={[.6-i*.03,.045,8,20]} position={[0,y,-.05]} rotation={[Math.PI/2,0,0]} color={BONE} opacity={.55} planes={planes}/>)}
+  <Shell shape="torus" args={[.48,.08,8,20]} position={[0,-1.55,-.05]} rotation={[Math.PI/2,0,0]} color={BONE} opacity={.55} planes={planes}/>
+  {[-1,1].map(sd=><group key={sd}>
+   <Shell shape="cylinder" args={[.055,.05,1.0,10]} position={[sd*1.28*armX,1.45,-.03]} rotation={[0,0,sd*-.09]} color={BONE} opacity={.6} planes={planes}/>
+   <Shell shape="cylinder" args={[.045,.04,.95,10]} position={[sd*1.3*armX,.4,.02]} rotation={[0,0,sd*-.05]} color={BONE} opacity={.6} planes={planes}/>
+   <Shell shape="cylinder" args={[.09,.07,1.5,10]} position={[sd*.55*legX,-2.35,-.05]} color={BONE} opacity={.6} planes={planes}/>
+   <Shell shape="cylinder" args={[.07,.05,1.45,10]} position={[sd*.57*legX,-3.9,0]} color={BONE} opacity={.6} planes={planes}/>
+  </group>)}
+ </group>;
+}
+export default function AnatomyModel({selected,choose,hidden,data,planes,reduced,sex,bodyOpacity,showLabels,onHoverOrgan,demoImagingOpen}){
+ const profile=BODY_PROFILES[sex||'unspecified'];
+ const opacity=Math.min(1,Math.max(0,(bodyOpacity??55)/100));
+ return <group>
+ {!hidden.body&&<>
+  <Torso profile={profile} planes={planes} opacity={opacity}/>
+  <Shell shape="sphere" args={[.58*profile.headScale,32,24]} position={[0,3.5,.04]} opacity={opacity} planes={planes}/>
+  <Shell shape="cylinder" args={[.2,.28,.5,24]} position={[0,2.92,-.05]} opacity={opacity} planes={planes}/>
+  <Limb side={-1} planes={planes} limbScale={profile.limbScale} shoulderX={profile.shoulderX} hipX={profile.hipX}/>
+  <Limb side={1} planes={planes} limbScale={profile.limbScale} shoulderX={profile.shoulderX} hipX={profile.hipX}/>
+ </>}
+ {!hidden.skeleton&&<Skeleton planes={planes} profile={profile}/>}
+ {organs.filter(o=>!hidden[o.id]).map(o=>{
+  const targets=targetsFor(data,o.group);
+  return <Organ key={o.id} organ={o} selected={selected===o.id} dim={!!selected&&selected!==o.id} choose={choose}
+   severity={severityFor(targets)} targets={targets} planes={planes} reduced={reduced}
+   showLabels={showLabels} onHover={onHoverOrgan} demoImagingOpen={demoImagingOpen}/>;
+ })}
  {!hidden.spine&&Array.from({length:18},(_,i)=><mesh key={i} position={[0,-1.49+i*.218,-.56]} raycast={()=>null}><cylinderGeometry args={[.2,.19,.15,12]}/><meshStandardMaterial color="#c2ced0" transparent opacity={selected==='spine'?.9:.25} clippingPlanes={planes}/></mesh>)}
  {!hidden.vascular&&[-1,1].map(side=><Line key={side} points={[[0,-.25,-.1],[side*.3,-.3,-.15],[side*.6,-.36,-.22]]} color={colors[severityFor(targetsFor(data,'systemic'))]} lineWidth={3}/>)}
  </group>;

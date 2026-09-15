@@ -95,6 +95,19 @@ ASCII 키워드에는 단어 경계를 적용해 AST가 last, GI가 digoxin에 �
 - React 및 React DOM은 19 계열을 유지하며 `19.2.4`로 함께 고정했습니다. 설치 당시 최신 버전 자동 선택에 따른 R3F peer 범위 충돌을 피하고 lockfile로 재현합니다.
 - 백엔드 dependency는 추가하지 않았습니다.
 
+## Patient Digital Twin 업그레이드 (2단계)
+
+- **성별 특화 인체**: `patient.sex`가 `male`/`female`일 때만 해당 체형 프로파일(`anatomyMap.js`의 `BODY_PROFILES`)을 사용합니다. 그 외 값이거나 없으면 "Sex-specific anatomy unavailable" 안내를 표시하고 중립(unspecified) 프로파일로 대체합니다 — 임의 추정하지 않습니다. 몸통은 흉곽·허리·골반 단면 반경이 다른 lathe(회전체) 실루엣이라 남녀가 실제로 다른 형태로 보입니다. GLB로 교체하려면 `frontend/public/models/anatomy/README.md`의 `VITE_ANATOMY_MODEL_URL_MALE`/`_FEMALE`를 참고하십시오.
+- **레이어 패널**: Body/Skeleton/장기(15종, 아래 표 참고) 각각에 Eye(표시·숨김), Isolate(단독 보기), 체크박스(다중 선택)를 제공합니다. SHOW ALL / HIDE ALL / SHOW SELECTED / RESET VIEW 버튼은 모두 3D visibility만 바꾸며 환자 데이터나 장기 객체를 삭제하지 않습니다.
+- **BODY OPACITY 슬라이더 + 프리셋**(Skin/Transparent/X-Ray/Organs Only): 신체 셸의 투명도와 body/skeleton 표시 여부를 함께 제어합니다.
+- **PATIENT CONDITIONS 패널**: `patient.conditions`를 그대로 나열하고(없으면 "No documented condition data"), 고정 테이블(`CONDITION_ICD10`)의 ICD-10 코드를 병기합니다. 클릭하면 백엔드가 이미 계산한 `anatomy.targets`의 조건-근거 연결(고정 키워드 매핑, LLM 실시간 추론 아님)을 따라 해당 장기로 포커스하고 body opacity를 낮춥니다. 연결된 장기가 없으면 전신으로 대체합니다.
+- **장기 상세 탭**(Anatomy/Clinical Data/Imaging/Labs/Medication/Warnings): Clinical Data 탭은 기존 `AnatomyRiskPanel`을 그대로 재사용합니다. Labs/Medication은 고정 테이블(`ORGAN_LABS`)과 백엔드가 이미 반환한 `sources`만 사용하며, 화면에는 환자에게 실제로 존재하는 값만 표시합니다.
+- **범례**: Cyan(임상 연관)/Amber(검토 권고)/Red(고위험)/Purple(영상 소견) 4단계. Purple은 실제 segmentation이 있을 때만 쓰도록 예약되어 있으며, 이 데모에는 segmentation 데이터가 없으므로 현재 어떤 장기도 Purple로 표시되지 않습니다.
+- **IMAGING STUDIES (데모)**: 환자 실제 영상이 없으므로 기본값은 "No patient imaging available."이며, `OPEN DEMO IMAGING`을 눌러야 3-분할 Axial/Coronal/Sagittal 데모 패널이 열립니다. 이 패널은 실제 DICOM/NIfTI를 읽지 않고, 3D와 동일한 참고 메시 단면(`geometry.crossSectionPaths`)을 사용합니다. 한 화면 클릭 시 나머지 두 화면의 교차선(crosshair)이 함께 이동하고, 슬라이더를 움직이면 위쪽 3D 모델의 절단면도 즉시 반영됩니다(기존 단일 단면 절단 메커니즘 재사용). SEGMENTATION 섹션은 실제 segmentation 데이터가 없다는 사실을 그대로 표시하며 가짜 병변(Tumor 등)을 생성하지 않습니다.
+- **REFERENCE ANATOMY vs PATIENT-DERIVED IMAGING**: 이 프로젝트에는 후자가 없습니다. 데모 영상 패널·3D 모델 모두 "REFERENCE" 라벨을 유지합니다.
+
+추가된 장기: 췌장(pancreas), 비장(spleen), 방광(bladder), 소장(smallIntestine), 대장(largeIntestine). `backend/data/anatomy_mapping.json`에 대응 키워드를 추가했습니다.
+
 ## 현재 범위와 확장 지점
 
 현재 모델은 직접 만든 **procedural/basic anatomy placeholder**입니다. 장기 메시를 감싸는 반투명 인체 실루엣(머리·목·몸통·골반·팔·다리)도 같은 방식의 절차적 참고 형상이며, 장기 분리·선택·위험 연결·실제 절단 기능은 동작하지만 레퍼런스 영상과 같은 정밀 해부학 GLB 또는 CT 재구성은 아닙니다. 실제 CT/MRI/DICOM, 종양·출혈 위치, 환자 영상·segmentation은 포함하지 않습니다. 단면의 상대 좌표는 mm가 아니며, 절단면 표면 캡을 생성하지 않으므로 잘린 메시 내부는 열린 형태입니다.
