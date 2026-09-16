@@ -3,7 +3,11 @@ __pycache__/
 .pytest_cache/
 *.pyc
 node_modules/
-frontend/dist/
+# frontend/dist is tracked (see below) so `python -m uvicorn ...` alone serves the app with no
+# npm/node build step, but Vite's copy of the (already-tracked, large) public/models assets into
+# dist/models on every build would duplicate them in git -- excluded, main.py serves /models
+# straight from frontend/public/models instead.
+frontend/dist/models/
 .env
 .env.local
 .env.test.local

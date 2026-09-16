@@ -240,9 +240,12 @@ def smart_callback(code:str,state:str):
     return token
 
 DIST=Path(__file__).resolve().parents[2]/'frontend'/'dist'
+# Served straight from frontend/public (not the dist copy Vite makes on build) so the real
+# anatomy GLBs -- large, checked into git -- don't need duplicating inside dist/ too.
+PUBLIC_MODELS=Path(__file__).resolve().parents[2]/'frontend'/'public'/'models'
+if PUBLIC_MODELS.exists():
+    app.mount('/models',StaticFiles(directory=PUBLIC_MODELS),name='models')
 if DIST.exists():
-    if (DIST/'models').exists():
-        app.mount('/models',StaticFiles(directory=DIST/'models'),name='models')
     app.mount('/assets',StaticFiles(directory=DIST/'assets'),name='assets')
     @app.get('/',include_in_schema=False)
     def index():return FileResponse(DIST/'index.html')
