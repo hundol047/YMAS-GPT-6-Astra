@@ -5,7 +5,7 @@ import DrugCombobox from './components/DrugCombobox';
 import {organs} from './data/anatomyMap';
 import {Activity,ArrowUpRight,ArrowRight,Search,Users,ShieldCheck,TriangleAlert,Pill,FlaskConical,HeartPulse,ChevronRight,Check,Plus,X,RotateCw,ClipboardCheck,History,Database,BrainCircuit,PanelRightClose,Info,Layers,FileText,CircleCheck,Clock,UserPlus,Trash2} from 'lucide-react';
 import {ResponsiveContainer,LineChart,Line,XAxis,YAxis,Tooltip,CartesianGrid,ReferenceArea} from 'recharts';
-import {api,BASE} from './lib/api';
+import {api,BASE,streamSSE} from './lib/api';
 import PatientClinicalHeader from './components/PatientClinicalHeader';
 import TimelinePanel from './components/TimelinePanel';
 import ClinicalNotePanel from './components/ClinicalNotePanel';
@@ -36,6 +36,8 @@ export default function App(){
  const [anatomyFocus,setAnatomyFocus]=useState(null);
  const [dataQuality,setDataQuality]=useState(null);
  const [encounters,setEncounters]=useState([]);
+ const [clinicalSummary,setClinicalSummary]=useState(null);
+ const [timelineHighlight,setTimelineHighlight]=useState(null);
  const [customPatients,setCustomPatients]=useState([]),[customResults,setCustomResults]=useState({}),[customOpen,setCustomOpen]=useState(false);
  const [patientsUnavailable,setPatientsUnavailable]=useState(false),[fhirLookup,setFhirLookup]=useState('');
  const epoch=useRef(0), dialogRef=useRef(null), priorFocus=useRef(null), customRef=useRef([]);
@@ -46,7 +48,7 @@ export default function App(){
   // (see backend/app/services/emr_adapter.py FHIRAdapter.list()) -- that must not also block the
   // drug catalog from loading, and the UI needs to fall back to manual patient-ID lookup instead
   // of just showing a dead error banner.
-  fetch(BASE+'/patients',{signal:controller.signal}).then(async r=>{
+  fetch(BASE+'/patients',{signal:controller.signal,credentials:'include'}).then(async r=>{
    if(r.status===501){
     setPatientsUnavailable(true);setPatients([]);
     // Production SMART on FHIR flow: the EMR already chose the patient via SMART Launch, and
@@ -63,8 +65,8 @@ export default function App(){
  },[boot]);
  useEffect(()=>{customRef.current=customPatients},[customPatients]);
  useEffect(()=>{
-  const run=++epoch.current,controller=new AbortController();let source,timers=[];
-  setPatient(null);setAnalysis(null);setSteps([]);setBusy(true);setError('');setSimulation(null);setAlert(null);setNotice('');setReviewed({});setAudit([]);setTab(t=>t==='anatomy'?'anatomy':'overview');setDrug('');setDataQuality(null);setEncounters([]);
+  const run=++epoch.current,controller=new AbortController();let streamController,timers=[];
+  setPatient(null);setAnalysis(null);setSteps([]);setBusy(true);setError('');setSimulation(null);setAlert(null);setNotice('');setReviewed({});setAudit([]);setTab(t=>t==='anatomy'?'anatomy':'overview');setDrug('');setDataQuality(null);setEncounters([]);setClinicalSummary(null);setTimelineHighlight(null);
   const custom=customRef.current.find(c=>c.id===selected);
   if(custom){
    setPatient(custom);setLabName(custom.labs[0]?.name||'INR');
@@ -81,21 +83,26 @@ export default function App(){
    if(run!==epoch.current)return;setPatient(p);setLabName(p.id==='SYN-005'?'eGFR':'INR');
    api('/patients/'+selected+'/data-quality',undefined,controller.signal).then(dq=>{if(run===epoch.current)setDataQuality(dq)}).catch(()=>{});
    api('/patients/'+selected+'/encounters',undefined,controller.signal).then(es=>{if(run===epoch.current)setEncounters(es)}).catch(()=>{});
-   source=new EventSource(BASE+'/agent/stream/'+selected);const received=[];
-   source.addEventListener('step',e=>{received.push(JSON.parse(e.data));});
-   source.addEventListener('result',e=>{
-    source.close();const result=JSON.parse(e.data);const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // Reveal completed server steps. Labels explicitly say this is a result playback.
-    received.forEach((s,i)=>timers.push(setTimeout(()=>{if(run===epoch.current)setSteps(prev=>[...prev,s])},reduced?0:i*120)));
-    timers.push(setTimeout(()=>{if(run===epoch.current){setAnalysis(result);setBusy(false);refreshAudit(selected,run)}},reduced?0:received.length*120));
-   });
-   source.addEventListener('failure',()=>{source.close();if(run===epoch.current){setError('분석에 실패했습니다. 다시 분석을 눌러주십시오.');setBusy(false)}});
-   source.onerror=()=>{source.close();if(run===epoch.current){setError('분석 서버 연결이 끊겼습니다. 다시 분석을 눌러주십시오.');setBusy(false)}};
+   api('/patients/'+selected+'/clinical-summary',undefined,controller.signal).then(cs=>{if(run===epoch.current)setClinicalSummary(cs)}).catch(()=>{});
+   streamController=new AbortController();const received=[];
+   streamSSE('/agent/stream/'+selected,{signal:streamController.signal,onEvent:(event,data)=>{
+    if(event==='step'){received.push(JSON.parse(data));return}
+    if(event==='result'){
+     const result=JSON.parse(data);const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+     // Reveal completed server steps. Labels explicitly say this is a result playback.
+     received.forEach((s,i)=>timers.push(setTimeout(()=>{if(run===epoch.current)setSteps(prev=>[...prev,s])},reduced?0:i*120)));
+     timers.push(setTimeout(()=>{if(run===epoch.current){setAnalysis(result);setBusy(false);refreshAudit(selected,run)}},reduced?0:received.length*120));
+     return;
+    }
+    if(event==='failure'){if(run===epoch.current){setError('분석에 실패했습니다. 다시 분석을 눌러주십시오.');setBusy(false)}}
+   }}).catch(e=>{if(e.name!=='AbortError'&&run===epoch.current){setError('분석 서버 연결이 끊겼습니다. 다시 분석을 눌러주십시오.');setBusy(false)}});
   }).catch(e=>{if(e.name!=='AbortError'&&run===epoch.current){setError(e.message);setBusy(false)}});
-  return()=>{controller.abort();source?.close();timers.forEach(clearTimeout)};
+  return()=>{controller.abort();streamController?.abort();timers.forEach(clearTimeout)};
  },[selected,revision]);
  async function refreshAudit(pid=selected,run=epoch.current){try{const data=await api('/audit/'+pid);if(run===epoch.current)setAudit(data)}catch(e){if(run===epoch.current)setError(e.message)}}
  async function refreshEncounters(){if(customRef.current.some(c=>c.id===selected))return;try{setEncounters(await api('/patients/'+selected+'/encounters'))}catch(e){setError(e.message)}}
+ async function refreshClinicalSummary(){if(customRef.current.some(c=>c.id===selected))return;try{setClinicalSummary(await api('/patients/'+selected+'/clinical-summary'))}catch{}}
+ function jumpToSource(sourceEvents){setTimelineHighlight(new Set((sourceEvents||[]).filter(Boolean)));setTab('timeline')}
  async function startEncounter(){
   if(customRef.current.some(c=>c.id===selected))return;
   const last=[...encounters].sort((a,b)=>(b.started_at||'').localeCompare(a.started_at||''))[0];
@@ -160,14 +167,21 @@ export default function App(){
    {tab==='overview'&&<>
     <div className="analysis-grid"><section className="risk-card"><div className="card-label"><span>SYNEX RISK INDEX</span><BrainCircuit size={18}/></div><div className="score-line"><strong>{analysis?Math.round(analysis.risk.risk_probability*100):'—'}</strong><span>/100</span></div><div className="score-bottom"><Badge severity={analysis?.risk.risk_level==='high'?'danger':'info'}>{analysis?(analysis.risk.risk_level==='high'?'HIGH · 모델 고위험':'LOW · 모델 저위험'):'분석 중'}</Badge><span>v3 ONNX</span></div><div className="score-meter"><span style={{width:analysis?`${analysis.risk.risk_probability*100}%`:'0%'}}/></div><p>이 값은 모델 내부 신호를 0–100 척도로 재표현한 것이며,<br/>실제 부작용 발생 확률이나 보정(calibrated)된 임상 위험도가 아닙니다.<br/>임상 의사결정을 보조하기 위한 참고 신호입니다.</p></section>
     <section className="summary-card"><div className="section-head"><h2><BrainCircuit size={18}/> Agent 임상 요약</h2><span className="small-status">{busy?'분석 결과 수신 중':analysis?'분석 완료':'결과 없음'}</span></div>{analysis?<><p className="summary-text">{analysis.summary}</p><div className="summary-counts"><span><i className="signal danger"/>{danger} 위험</span><span><i className="signal caution"/>{caution} 주의</span><span><Check size={15}/> {analysis.steps.length} 단계 완료</span></div><div className="summary-note"><Info size={15}/><span>{analysis.missing.length?'정보 부족: '+analysis.missing.join(', '):'규칙 근거를 요약했습니다. 최종 판단은 의료진이 수행합니다.'}</span></div>{!!analysis.brief_facts?.length&&<div className="brief-facts">{analysis.brief_facts.map((f,i)=><button key={i} onClick={()=>setTab(f.nav==='overview'?'overview':f.nav)}>{f.text}<ChevronRight size={13}/></button>)}</div>}</>:<div className="skeleton-block"><span/><span/><span/></div>}</section></div>
+    {!isCustom&&<section className="clinical-summary-card"><div className="section-head"><h2><FileText size={18}/> SynexAgent Clinical Summary</h2><span className="small-status">최근 {clinicalSummary?.window_months??6}개월</span></div>
+     {!clinicalSummary?<p className="muted">요약을 불러오는 중…</p>:!clinicalSummary.sentences.length?<p className="muted">최근 기간 내 감지된 주요 변화가 없습니다.</p>:<>
+      <p className="muted small">최근 주요 변화</p>
+      <ul className="clinical-summary-list">{clinicalSummary.sentences.map((s,i)=><li key={i}><span>{s.text}</span>{!!s.source_events?.filter(Boolean).length&&<button className="text-button" onClick={()=>jumpToSource(s.source_events)}>관련 기록 보기<ChevronRight size={13}/></button>}</li>)}</ul>
+     </>}
+     <p className="clinical-summary-disclaimer"><Info size={14}/>{clinicalSummary?.disclaimer||'이 요약은 저장된 실제 데이터에서 결정론적 규칙으로 생성되며, 임상 판단을 대체하지 않습니다.'}</p>
+    </section>}
     <section className="alerts-section"><div className="section-head"><h2>검토가 필요한 신호 <span className="count">{analysis?.alerts.length??'—'}</span></h2><span className="muted">위험도순 · 규칙 기반</span></div><div className="alert-list">{analysis?.alerts.map(a=><button className={'alert-row '+a.severity} key={a.id} onClick={()=>openAlert(a)}><span className="alert-icon">{a.severity==='danger'?<TriangleAlert size={20}/>:a.severity==='caution'?<Info size={20}/>:<Layers size={20}/>}</span><div className="alert-body"><div><b>{a.title}</b><Badge severity={a.severity}/>{reviewed[analysis.analysis_id+a.id]&&<span className="review-tag">검토 기록됨</span>}</div><p>{a.reason}</p></div><ChevronRight size={18}/></button>)}{analysis&&!analysis.alerts.length&&<div className="no-alert"><CircleCheck size={25}/><div><b>제공 규칙에서 경고를 찾지 못했습니다.</b><p>미등록 약물·용량·새로운 상호작용은 별도 검토가 필요합니다.</p></div></div>}{busy&&<div className="loading-note">환자별 위험 신호를 정리하고 있습니다.</div>}</div></section>
     <section className="simulation-card"><div className="section-head"><h2><Pill size={18}/> 처방 시뮬레이션</h2><span className="simulation-pill">가상 추가</span></div><p className="alt-info-tag">ALTERNATIVE INFORMATION FOR CLINICIAN REVIEW · Reference information only. Final treatment selection remains with the clinician.</p><p className="muted">추가할 약물을 선택해 현재 처방과 비교합니다.</p><form onSubmit={simulate} className="simulation-form"><DrugCombobox label="추가 약물" catalog={catalog} value={drug} onChange={d=>{setDrug(d);setSimulation(null)}} exclude={new Set(active.map(m=>m.drug_id))} disabled={simBusy||busy}/><button className="primary-button" disabled={!drug||simBusy||busy}>{simBusy?<RotateCw size={17} className="spin"/>:<Plus size={17}/>} {simBusy?'재분석 중':'위험 비교'}</button></form>{simulation&&<div className="simulation-result" aria-live="polite"><div className="comparison"><div><small>현재 RISK INDEX</small><b>{riskIndex(simulation.before.risk.risk_probability)}<small>/100</small></b></div><ArrowRight size={22}/><div><small>{simulation.drug.name_ko} 추가</small><b>{riskIndex(simulation.after.risk.risk_probability)}<small>/100</small></b></div><span className={'delta '+(simulation.delta_percentage_points>0?'text-danger':'')}>{simulation.delta_percentage_points>0?'+':''}{simulation.delta_percentage_points.toFixed(1)}p</span></div><p className="muted small">모델 신호 재표현값이며 실제 확률이 아닙니다.</p><p>새 신호 {simulation.new_alerts.length}건 · 원래 처방 유지</p>{simulation.new_alerts.map(a=><button className="sim-alert" key={a.id} onClick={()=>openAlert(a,simulation.after.analysis_id)}><Badge severity={a.severity}/><span>{a.title}</span><ChevronRight size={15}/></button>)}{!simulation.new_alerts.length&&<p className="muted">새로운 규칙 경고 없음. 안전한 처방임을 보증하지 않습니다.</p>}<button className="text-button" onClick={()=>setSimulation(null)}>비교 닫기</button></div>}</section>
     <section className="labs-card"><div className="section-head"><h2><FlaskConical size={18}/> 검사 수치 변화</h2><select aria-label="검사 항목" value={labName} onChange={e=>setLabName(e.target.value)}>{[...new Set(patient?.labs.map(l=>l.name)||[])].map(n=><option key={n}>{n}</option>)}</select></div><div className="lab-meta"><strong>{labs.at(-1)?.value??'—'}</strong><span>{labs.at(-1)?.unit} · {labs.at(-1)?.date}</span></div><div className="chart-wrap">{labs.length?<ResponsiveContainer width="100%" height={180}><LineChart data={labs} margin={{top:10,right:18,bottom:0,left:-20}}><CartesianGrid strokeDasharray="3 5" vertical={false} stroke="#e5eced"/><XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize:12,fill:'#697c82'}}/><YAxis domain={['auto','auto']} axisLine={false} tickLine={false} tick={{fontSize:12,fill:'#697c82'}}/><Tooltip formatter={v=>[v,labName]}/><Line type="linear" dataKey="value" stroke="#008a78" strokeWidth={2.5} dot={{r:4,fill:'#fff',strokeWidth:2}} activeDot={{r:6}}/></LineChart></ResponsiveContainer>:<p>검사 정보가 없습니다.</p>}</div><p className="chart-note">가상 검사 데이터 · 제공 참고범위 {labs.at(-1)?.low}–{labs.at(-1)?.high}. 검사 수치는 v3 모델의 직접 입력이 아닙니다.</p></section>
     <section className="gaps-card"><div className="section-head"><h2><TriangleAlert size={18}/> DATA GAPS</h2></div>{customPatients.some(c=>c.id===selected)?<p className="muted">직접 입력한 환자는 데이터 품질 평가를 제공하지 않습니다.</p>:!dataQuality?<p className="muted">평가 중…</p>:!dataQuality.gaps.length?<div className="no-alert"><CircleCheck size={20}/><div><b>현재 확인된 데이터 공백이 없습니다.</b><p>완전성 확인이지 임상적 정상 판정이 아닙니다.</p></div></div>:<ul className="gaps-list">{dataQuality.gaps.map((g,i)=><li key={i}><Badge severity={g.status==='STALE'?'caution':'danger'}>{g.status}</Badge><span>{g.message}</span></li>)}</ul>}</section>
    </>}
-   {tab==='timeline'&&<TimelinePanel patient={patient} disabled={isCustom}/>}
-   {tab==='clinical-note'&&<ClinicalNotePanel encounters={encounters} onStartEncounter={startEncounter} onVitalsChanged={refreshEncounters} disabled={isCustom}/>}
-   {tab==='orders'&&<OrdersPanel catalog={catalog} encounters={encounters} onStartEncounter={startEncounter} onOrdersChanged={()=>{refreshEncounters();refreshAudit()}} disabled={isCustom}/>}
+   {tab==='timeline'&&<TimelinePanel patient={patient} disabled={isCustom} highlightIds={timelineHighlight}/>}
+   {tab==='clinical-note'&&<ClinicalNotePanel patientId={patient?.id} encounters={encounters} onStartEncounter={startEncounter} onVitalsChanged={()=>{refreshEncounters();refreshClinicalSummary()}} onDiagnosisChanged={()=>{refreshEncounters();refreshClinicalSummary();refreshAudit()}} disabled={isCustom}/>}
+   {tab==='orders'&&<OrdersPanel catalog={catalog} encounters={encounters} onStartEncounter={startEncounter} onOrdersChanged={()=>{refreshEncounters();refreshAudit();refreshClinicalSummary()}} disabled={isCustom}/>}
    {tab==='results'&&<ResultsPanel patient={patient} disabled={isCustom}/>}
    {tab==='medication'&&<MedicationOrdersPanel patient={patient} catalog={catalog} disabled={isCustom}/>}
    {tab==='anatomy'&&<Suspense fallback={<p>Loading anatomical model…</p>}><AnatomyWorkspace key={selected} patient={patient} analysis={analysis} simulation={simulation} onOpenAlert={openAlert} focus={anatomyFocus} catalog={catalog}/></Suspense>}

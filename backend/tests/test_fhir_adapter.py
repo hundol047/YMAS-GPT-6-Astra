@@ -4,7 +4,9 @@ environment. This proves the request/response parsing is correct against the spe
 NOT prove interoperability with any specific real EHR vendor's FHIR server."""
 import httpx
 import pytest
-from app.services.emr_adapter import FHIRAdapter, SmartOAuthClient
+from app.services.emr_adapter import (FHIRAdapter, SmartOAuthClient, ClientCredentialsTokenProvider,
+                                       SmartSessionTokenProvider)
+from app.services.smart_launch import CURRENT_SESSION_ID, create_session
 
 FHIR_PATIENT = {
     "resourceType": "Patient", "id": "fhir-1",
@@ -141,6 +143,98 @@ def test_fhir_adapter_missing_data_is_reported_not_hidden():
     assert "birth date" in p.missing
     assert "condition history (none returned)" in p.missing
     assert "medication list (none returned)" in p.missing
+
+# --- Token-provider wiring (item 3 of the bug-fix round): the real SMART Launch -> access token
+# -> server-side session -> FHIRAdapter request chain, verified against a fake FHIR server that
+# echoes back whatever Authorization header it received so the test can assert on it directly. ----
+def _auth_echo_transport():
+    seen = {}
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen['authorization'] = request.headers.get('authorization')
+        return httpx.Response(200, json=FHIR_PATIENT)
+    return httpx.MockTransport(handler), seen
+
+
+def test_client_credentials_mode_still_works_unchanged():
+    # FHIR_AUTH_MODE=client_credentials (the default): unchanged behavior from before this round --
+    # FHIRAdapter with no token_provider given falls back to ClientCredentialsTokenProvider(oauth).
+    transport, seen = _auth_echo_transport()
+    def token_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith('/.well-known/smart-configuration'):
+            return httpx.Response(200, json={'token_endpoint': 'https://fake-fhir.example/oauth2/token'})
+        if request.url.path.endswith('/oauth2/token'):
+            return httpx.Response(200, json={'access_token': 'client-credentials-token', 'expires_in': 300})
+        seen['authorization'] = request.headers.get('authorization')
+        return httpx.Response(200, json=FHIR_PATIENT)
+    combined_transport = httpx.MockTransport(token_handler)
+    oauth = SmartOAuthClient('https://fake-fhir.example/r4', 'client-id', 'secret', 'system/*.read',
+                              transport=combined_transport)
+    adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4', oauth=oauth, transport=combined_transport)
+    assert isinstance(adapter.token_provider, ClientCredentialsTokenProvider)
+    p = adapter.get('fhir-1')
+    assert p is not None
+    assert seen['authorization'] == 'Bearer client-credentials-token'
+
+
+def test_client_credentials_mode_with_no_oauth_sends_no_authorization_header():
+    # Unchanged pre-existing behavior: EMR_MODE=fhir with no FHIR_CLIENT_ID configured means an
+    # already-authenticated/network-restricted endpoint -- no bearer token sent at all.
+    transport, seen = _auth_echo_transport()
+    adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4', transport=transport)
+    adapter.get('fhir-1')
+    assert seen['authorization'] is None
+
+
+def test_smart_session_token_provider_uses_the_current_requests_session_token():
+    # The actual chain item 3 requires: a SMART Launch stored an access token in a server-side
+    # session (create_session, exactly what /smart/callback calls); main.py's per-request
+    # middleware would set CURRENT_SESSION_ID from the synex_session cookie -- simulated directly
+    # here the same way a request-scoped contextvar behaves. FHIRAdapter must then send THAT
+    # session's token as its Authorization header, not any client_credentials token.
+    session_id = create_session(patient_id='SYN-002', iss='https://fake-fhir.example/r4',
+                                 access_token='smart-session-token-abc')
+    reset_token = CURRENT_SESSION_ID.set(session_id)
+    try:
+        transport, seen = _auth_echo_transport()
+        adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4',
+                               token_provider=SmartSessionTokenProvider(), transport=transport)
+        p = adapter.get('fhir-1')
+        assert p is not None
+        assert seen['authorization'] == 'Bearer smart-session-token-abc'
+    finally:
+        CURRENT_SESSION_ID.reset(reset_token)
+
+
+def test_smart_session_token_provider_with_no_active_session_sends_no_authorization_header():
+    reset_token = CURRENT_SESSION_ID.set(None)
+    try:
+        transport, seen = _auth_echo_transport()
+        adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4',
+                               token_provider=SmartSessionTokenProvider(), transport=transport)
+        adapter.get('fhir-1')
+        assert seen['authorization'] is None
+    finally:
+        CURRENT_SESSION_ID.reset(reset_token)
+
+
+def test_build_adapter_selects_token_provider_by_fhir_auth_mode(monkeypatch):
+    monkeypatch.setenv('EMR_MODE', 'fhir')
+    monkeypatch.setenv('FHIR_BASE_URL', 'https://fake-fhir.example/r4')
+    monkeypatch.delenv('FHIR_CLIENT_ID', raising=False)
+    from app.main import build_adapter
+
+    monkeypatch.setenv('FHIR_AUTH_MODE', 'smart')
+    smart_adapter = build_adapter()
+    assert isinstance(smart_adapter.token_provider, SmartSessionTokenProvider)
+
+    monkeypatch.delenv('FHIR_AUTH_MODE', raising=False)
+    default_adapter = build_adapter()
+    assert isinstance(default_adapter.token_provider, ClientCredentialsTokenProvider)
+
+    monkeypatch.setenv('FHIR_AUTH_MODE', 'client_credentials')
+    explicit_adapter = build_adapter()
+    assert isinstance(explicit_adapter.token_provider, ClientCredentialsTokenProvider)
+
 
 def test_smart_oauth_client_gets_token_via_discovery():
     def handler(request: httpx.Request) -> httpx.Response:

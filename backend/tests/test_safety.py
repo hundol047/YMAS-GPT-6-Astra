@@ -131,3 +131,31 @@ def test_cors_and_production_entry(client):
     r=client.options('/predict',headers={'Origin':'https://untrusted.example','Access-Control-Request-Method':'POST'})
     assert 'access-control-allow-origin' not in r.headers
     r=client.get('/');assert r.status_code==200;assert 'SynexAgent' in r.text
+
+def test_cors_allows_patch_and_authorization_header(client):
+    # Regression test: PATCH Encounter/PATCH Clinical Note and the OIDC Authorization header used
+    # to be blocked by CORS (allow_methods was GET/POST only, allow_headers was Content-Type only).
+    r=client.options('/encounters/ENC-1',headers={'Origin':'http://localhost:5173',
+        'Access-Control-Request-Method':'PATCH','Access-Control-Request-Headers':'authorization'})
+    assert r.headers['access-control-allow-origin']=='http://localhost:5173'
+    assert 'PATCH' in r.headers['access-control-allow-methods']
+    assert 'authorization' in r.headers['access-control-allow-headers'].lower()
+
+def test_cors_allows_credentials_for_session_cookie(client):
+    # The synex_session HttpOnly cookie (SMART on FHIR context, SSE auth) needs allow_credentials
+    # so the browser will actually send it on a cross-origin dev request.
+    r=client.options('/predict',headers={'Origin':'http://localhost:5173','Access-Control-Request-Method':'POST'})
+    assert r.headers.get('access-control-allow-credentials')=='true'
+
+def test_cors_wildcard_origin_with_credentials_is_refused_at_startup():
+    from app.main import resolve_cors_config
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError):
+        resolve_cors_config(cors_origins_env='*', allow_credentials_env='true')
+    # Explicitly turning credentials off makes a wildcard origin fine again (no cookie/token ever
+    # sent, so there's nothing for a malicious origin to piggyback on).
+    origins,allow_credentials=resolve_cors_config(cors_origins_env='*', allow_credentials_env='false')
+    assert origins==['*'] and allow_credentials is False
+    # The actual production default: explicit origins, credentials on.
+    origins,allow_credentials=resolve_cors_config(cors_origins_env='https://emr.example.org', allow_credentials_env='true')
+    assert origins==['https://emr.example.org'] and allow_credentials is True

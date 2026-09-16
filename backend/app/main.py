@@ -11,14 +11,15 @@ from .schemas import (RiskFeatures, PatientRequest, SimulationRequest, ReviewReq
                        LabOrderCreateRequest, LabResultCreateRequest)
 from .services.risk_inference import RiskEngine
 from .services.rule_engine import CATALOG, DRUGS
-from .services.emr_adapter import DemoAdapter, FHIRAdapter, SmartOAuthClient
+from .services.emr_adapter import DemoAdapter, FHIRAdapter, SmartOAuthClient, SmartSessionTokenProvider
 from .services.clinical_agent import ClinicalAgent
 from .services.audit import AuditStore
 from .services.terminology_mapper import patient_terminology
 from .services.data_quality import assess as assess_data_quality
 from .services.cds_hooks import SERVICES_DOC, build_cards
-from .services.smart_launch import build_authorize_redirect, exchange_code, create_session, SESSIONS, SESSION_TTL_SECONDS
-from .services.auth import get_current_user, require, User
+from .services.smart_launch import (build_authorize_redirect, exchange_code, create_session, SESSIONS,
+                                     SESSION_TTL_SECONDS, CURRENT_SESSION_ID)
+from .services.auth import get_current_user, require, require_all, User
 from .services.validation import alert_type_breakdown, alert_fatigue_metrics
 from .services.imaging_pipeline import health as imaging_health
 from .services.rule_engine import RULE_METADATA
@@ -26,6 +27,7 @@ from .services.repositories import (EncounterRepository, ClinicalNoteRepository,
                                      MedicationOrderRepository, LabOrderRepository, NotFound as RepoNotFound)
 from .services.timeline import build_timeline, with_ai_warnings
 from .services.clinical_summary import build_summary
+from .services.results import unified_results
 from .services.vitals import assess as assess_vitals
 from .services.demo_seed import seed_demo_clinical_data
 from fastapi import Depends, Cookie
@@ -34,11 +36,23 @@ from fastapi.responses import RedirectResponse
 log=logging.getLogger('synexagent')
 
 def build_adapter():
-    """EMR_MODE=demo (default) or EMR_MODE=fhir. FHIR mode requires FHIR_BASE_URL; client
-    credentials (FHIR_CLIENT_ID/FHIR_CLIENT_SECRET/FHIR_SCOPE) are optional -- omit them to call
-    an already-authenticated/network-restricted FHIR endpoint with no bearer token."""
+    """EMR_MODE=demo (default) or EMR_MODE=fhir. FHIR mode requires FHIR_BASE_URL.
+
+    Within EMR_MODE=fhir, FHIR_AUTH_MODE picks how FHIRAdapter authenticates each request --
+    the two modes are mutually exclusive, never blended:
+      - FHIR_AUTH_MODE=client_credentials (default, unchanged from before this round): one shared
+        app-level token from FHIR_CLIENT_ID/FHIR_CLIENT_SECRET/FHIR_SCOPE. Optional -- omit
+        FHIR_CLIENT_ID to call an already-authenticated/network-restricted FHIR endpoint with no
+        bearer token at all.
+      - FHIR_AUTH_MODE=smart: each request instead uses the per-clinician access token SMART App
+        Launch stored in the browser's session (see smart_session_context middleware below and
+        emr_adapter.SmartSessionTokenProvider) -- the real SMART Launch -> session -> FHIR request
+        chain, not the shared client_credentials token.
+    """
     mode=os.getenv('EMR_MODE','demo').lower()
     if mode=='fhir':
+        if os.getenv('FHIR_AUTH_MODE','client_credentials').lower()=='smart':
+            return FHIRAdapter(token_provider=SmartSessionTokenProvider())
         client_id=os.getenv('FHIR_CLIENT_ID')
         oauth=SmartOAuthClient(os.environ['FHIR_BASE_URL'], client_id, os.getenv('FHIR_CLIENT_SECRET',''),
                                 os.getenv('FHIR_SCOPE','system/*.read')) if client_id else None
@@ -83,9 +97,39 @@ def call(fn,*args,**kwargs):
     except ValueError as e:
         raise HTTPException(422,str(e))
 
+def resolve_cors_config(cors_origins_env=None, allow_credentials_env=None):
+    """Parses SYNEX_CORS_ORIGINS/SYNEX_CORS_ALLOW_CREDENTIALS and enforces the one CORS rule that
+    must never be violated: allow_credentials=True (needed for the synex_session HttpOnly cookie --
+    SMART on FHIR launch context, SSE auth below -- to be sent on cross-origin dev requests) can
+    never be combined with a wildcard origin. That combination would accept a credentialed request
+    from ANY origin, which is exactly the CSRF-shaped hole CORS exists to prevent. Pulled out as a
+    standalone function (rather than inline at import time) so it's independently testable without
+    constructing a whole FastAPI app."""
+    origins=[o.strip() for o in (cors_origins_env if cors_origins_env is not None else
+             os.getenv('SYNEX_CORS_ORIGINS','http://localhost:5173,http://127.0.0.1:5173')).split(',') if o.strip()]
+    allow_credentials=(allow_credentials_env if allow_credentials_env is not None else
+                        os.getenv('SYNEX_CORS_ALLOW_CREDENTIALS','true')).lower()!='false'
+    if '*' in origins and allow_credentials:
+        raise RuntimeError('SYNEX_CORS_ORIGINS must not be "*" while credentialed CORS is enabled '
+                            '(cookies/Authorization) -- set explicit origins, or SYNEX_CORS_ALLOW_CREDENTIALS=false.')
+    return origins, allow_credentials
+
 app=FastAPI(title='SynexAgent Demo API',version='1.0.0',lifespan=lifespan)
-origins=os.getenv('SYNEX_CORS_ORIGINS','http://localhost:5173,http://127.0.0.1:5173').split(',')
-app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=['GET','POST'],allow_headers=['Content-Type'])
+_cors_origins,_cors_allow_credentials=resolve_cors_config()
+app.add_middleware(CORSMiddleware,allow_origins=_cors_origins,allow_credentials=_cors_allow_credentials,
+                    allow_methods=['GET','POST','PATCH','DELETE','OPTIONS'],allow_headers=['Content-Type','Authorization'])
+
+@app.middleware('http')
+async def smart_session_context_middleware(request,call_next):
+    """Makes 'which SMART session is this request' available to emr_adapter.SmartSessionTokenProvider
+    (FHIR_AUTH_MODE=smart) without threading a session_id through every adapter.get(pid) call site --
+    see smart_launch.CURRENT_SESSION_ID's docstring. Reads only the opaque session_id cookie, never
+    a token; reset in `finally` so it never leaks into the next request handled by this worker."""
+    reset_token=CURRENT_SESSION_ID.set(request.cookies.get('synex_session'))
+    try:
+        return await call_next(request)
+    finally:
+        CURRENT_SESSION_ID.reset(reset_token)
 
 def patient(pid):
     p=app.state.adapter.get(pid)
@@ -159,16 +203,16 @@ def data_quality(pid:str,user:User=Depends(require('patient:read'))):return asse
 def predict(features:RiskFeatures):return app.state.engine.predict(features)
 
 @app.post('/medication-check')
-def check(p:Patient):return app.state.agent.run(p)
+def check(p:Patient,user:User=Depends(require('analysis:read'))):return app.state.agent.run(p)
 
 @app.post('/agent/analyze')
-def analyze(req:PatientRequest):
+def analyze(req:PatientRequest,user:User=Depends(require('analysis:read'))):
     p=patient(req.patient_id)
     app.state.audit.record(p.id,'analysis_started',{})
     result=app.state.agent.run(p);save_analysis(result);return result
 
 @app.get('/agent/stream/{pid}')
-def stream(pid:str):
+def stream(pid:str,user:User=Depends(require('analysis:read'))):
     p=patient(pid)
     def events():
         try:
@@ -185,7 +229,7 @@ def stream(pid:str):
     return StreamingResponse(events(),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
 
 @app.post('/prescription/simulate')
-def simulate(req:SimulationRequest):
+def simulate(req:SimulationRequest,user:User=Depends(require_all('patient:read','order:write'))):
     p=patient(req.patient_id)
     if req.drug_id not in DRUGS:raise HTTPException(422,'Unknown drug: select a catalog entry')
     if any(m.status=='active' and m.drug_id==req.drug_id for m in p.medications):raise HTTPException(409,'이미 복용 중인 약물입니다.')
@@ -328,12 +372,21 @@ def amend_note(note_id:str,req:NoteAmendRequest,user:User=Depends(require('note:
     # ClinicalNoteRepository.amend()).
     note=call(app.state.note_repo.amend,note_id,author=req.author,reason=req.reason,subjective=req.subjective,
                objective=req.objective,assessment=req.assessment,plan=req.plan)
-    app.state.audit.record(note.patient_id,'note_modified',{'note_id':note_id,'kind':'amendment','author':req.author,'reason':req.reason},user_id=user.id,role=user.role)
+    app.state.audit.record(note.patient_id,'note_amended',{'note_id':note_id,'author':req.author,'reason':req.reason},user_id=user.id,role=user.role)
     return note
 
 def _agent_diff(p,drug_id,dispenses=None):
     """Same before/after comparison /prescription/simulate already uses -- reused here for
-    MedicationOrder's SynexAgent precheck instead of duplicating the risk-diff logic."""
+    MedicationOrder's SynexAgent precheck instead of duplicating the risk-diff logic.
+
+    dispenses is a risk-model feature meaning "how many times this medication has been
+    dispensed/refilled" (see feature_engineering.py's therapy_duration_load) -- a completely
+    different concept from MedicationOrder.quantity (how many units THIS order is for, e.g. "30
+    tablets"). Callers below must never pass quantity here: a new order for 30 tablets is not 30
+    past refill events, and doing so would make the risk model misread a brand-new prescription as
+    a long-established one. There is no real dispense-count data for a not-yet-confirmed order, so
+    this always stays at its default (None/unknown) -- the precheck evaluates the drug's presence
+    and interactions, not a fabricated refill history."""
     before=app.state.agent.run(p)
     proposal=p.model_copy(deep=True)
     proposal.medications.append(Medication(drug_id=drug_id,dispenses=dispenses,status='active',note='Precheck only'))
@@ -348,7 +401,7 @@ def medication_order_precheck(eid:str,req:MedicationOrderCreateRequest,user:User
     pid,_=call(app.state.encounter_repo.get_by_id,eid)
     p=patient(pid)
     if req.medication_code not in DRUGS:raise HTTPException(422,'Unknown drug: select a catalog entry')
-    before,after,new_alerts,delta=_agent_diff(p,req.medication_code,req.quantity)
+    before,after,new_alerts,delta=_agent_diff(p,req.medication_code)
     app.state.audit.record(pid,'ai_warning_viewed',{'encounter_id':eid,'medication_code':req.medication_code,'new_alert_count':len(new_alerts)},user_id=user.id,role=user.role)
     return {'patient_id':pid,'encounter_id':eid,'drug':DRUGS[req.medication_code],'before':before,'after':after,
             'delta_percentage_points':delta,'new_alerts':new_alerts,'requires_override':bool(new_alerts)}
@@ -362,7 +415,7 @@ def create_medication_order(eid:str,req:MedicationOrderCreateRequest,user:User=D
     pid,_=call(app.state.encounter_repo.get_by_id,eid)
     p=patient(pid)
     if req.medication_code not in DRUGS:raise HTTPException(422,'Unknown drug: select a catalog entry')
-    _,_,new_alerts,_=_agent_diff(p,req.medication_code,req.quantity)
+    _,_,new_alerts,_=_agent_diff(p,req.medication_code)
     if new_alerts and not (req.override_reason and req.override_reason.strip()):
         raise HTTPException(409,f'SynexAgent detected {len(new_alerts)} new signal(s); an override_reason is required to confirm this order.')
     order=call(app.state.medication_order_repo.create,pid,eid,medication_code=req.medication_code,medication_name=req.medication_name,
@@ -420,6 +473,16 @@ def list_lab_results(pid:str,user:User=Depends(require('order:read'))):
     patient(pid)
     orders=app.state.lab_order_repo.list_for_patient(pid)
     return [r for o in orders for r in [app.state.lab_order_repo.result_for(o.id)] if r]
+
+@app.get('/patients/{pid}/results')
+def results(pid:str,user:User=Depends(require('order:read'))):
+    # Unified Results: legacy/demo Patient.labs + FHIR Observations (already normalized into the
+    # same Patient.labs list at fetch time by FHIRAdapter -- see emr_adapter.py) + LabOrder/
+    # LabResult, merged chronologically. Does not replace /patients/{pid}/lab-orders or
+    # /patients/{pid}/lab-results, which still return their own narrower views.
+    p=patient(pid)
+    legacy_source='legacy' if isinstance(app.state.adapter,DemoAdapter) else 'fhir'
+    return {'patient_id':pid,'items':unified_results(p,lab_order_repo=app.state.lab_order_repo,legacy_source=legacy_source)}
 
 @app.get('/patients/{pid}/timeline')
 def timeline(pid:str,user:User=Depends(require('patient:read'))):

@@ -9,13 +9,15 @@ const emptyForm={author:'담당의',s:'',o:'',a:'',p:''};
 // explicit amendment form below, which always requires an author and a reason.
 const emptyVitals={sbp:'',dbp:'',heart_rate:'',respiratory_rate:'',temperature_c:'',spo2:'',height_cm:'',weight_kg:''};
 const num=v=>v===''?undefined:Number(v);
+const emptyDiagnosis={display_name:'',code:'',code_system:'ICD-10',diagnosis_type:'secondary',clinician:'담당의'};
 
-export default function ClinicalNotePanel({encounters,onStartEncounter,onVitalsChanged,disabled}){
+export default function ClinicalNotePanel({patientId,encounters,onStartEncounter,onVitalsChanged,onDiagnosisChanged,disabled}){
  const [activeId,setActiveId]=useState('');
  const [notes,setNotes]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [form,setForm]=useState(emptyForm);
  const [amending,setAmending]=useState(null),[amendReason,setAmendReason]=useState(''),[amendPlan,setAmendPlan]=useState('');
  const [vitals,setVitals]=useState(emptyVitals),[vitalsBusy,setVitalsBusy]=useState(false),[vitalsAssessment,setVitalsAssessment]=useState(null);
+ const [problemList,setProblemList]=useState([]),[diagnosis,setDiagnosis]=useState(emptyDiagnosis),[diagnosisBusy,setDiagnosisBusy]=useState(false);
 
  useEffect(()=>{
   if(!encounters?.length){setActiveId('');return}
@@ -27,6 +29,21 @@ export default function ClinicalNotePanel({encounters,onStartEncounter,onVitalsC
   try{setNotes(await api('/encounters/'+id+'/notes'))}catch(e){setError(e.message)}
  }
  useEffect(()=>{if(activeId)refresh(activeId)},[activeId]);
+
+ async function refreshProblemList(){
+  if(!patientId)return;
+  try{setProblemList(await api('/patients/'+patientId+'/problem-list'))}catch(e){setError(e.message)}
+ }
+ useEffect(()=>{refreshProblemList()},[patientId]);
+
+ async function createDiagnosis(e){
+  e.preventDefault();if(!activeId||!diagnosis.display_name.trim())return;setDiagnosisBusy(true);setError('');
+  try{
+   await api('/encounters/'+activeId+'/diagnoses',{display_name:diagnosis.display_name.trim(),diagnosis_type:diagnosis.diagnosis_type,
+    code:diagnosis.code,code_system:diagnosis.code_system,clinician:diagnosis.clinician});
+   setDiagnosis(emptyDiagnosis);await refreshProblemList();onDiagnosisChanged?.();
+  }catch(err){setError(err.message)}finally{setDiagnosisBusy(false)}
+ }
 
  async function createNote(e){
   e.preventDefault();if(!activeId)return;setBusy(true);setError('');
@@ -86,6 +103,22 @@ export default function ClinicalNotePanel({encounters,onStartEncounter,onVitalsC
     {Object.entries(vitalsAssessment.flags).filter(([,f])=>f.status!=='normal').map(([k,f])=><span key={k} className={'badge '+(f.status==='critical'?'danger':'caution')}>{k} {f.status}</span>)}
     {Object.values(vitalsAssessment.flags).every(f=>f.status==='normal')&&<span className="muted">모두 참고범위(prototype policy) 내</span>}
    </div>}
+  </div>
+  <div className="diagnosis-block">
+   <h3>Diagnosis / Problem List</h3>
+   {problemList.length?<div className="diagnosis-list">{problemList.map(dx=><div key={dx.id} className="diagnosis-row">
+    <b>{dx.display_name}</b><span>{dx.code?`${dx.code_system} ${dx.code}`:dx.code_system}</span>
+    <span className="badge info">{dx.diagnosis_type==='primary'?'Primary':'Secondary'}</span>
+    <span className={'badge '+(dx.status==='active'?'caution':'info')}>{dx.status==='active'?'Active':'Resolved'}</span>
+    <small>{dx.diagnosed_at?.slice(0,10)}</small>
+   </div>)}</div>:<p className="muted">등록된 진단이 없습니다.</p>}
+   <form onSubmit={createDiagnosis} className="diagnosis-form">
+    <label>Display<input value={diagnosis.display_name} onChange={e=>setDiagnosis(d=>({...d,display_name:e.target.value}))} placeholder="예: Atrial fibrillation" required/></label>
+    <label>Code<input value={diagnosis.code} onChange={e=>setDiagnosis(d=>({...d,code:e.target.value}))} placeholder="예: I48.91"/></label>
+    <label>Code system<select value={diagnosis.code_system} onChange={e=>setDiagnosis(d=>({...d,code_system:e.target.value}))}><option value="ICD-10">ICD-10</option><option value="SNOMED-CT">SNOMED-CT</option><option value="text">Text</option></select></label>
+    <label>Type<select value={diagnosis.diagnosis_type} onChange={e=>setDiagnosis(d=>({...d,diagnosis_type:e.target.value}))}><option value="primary">Primary</option><option value="secondary">Secondary</option></select></label>
+    <button className="primary-button" disabled={diagnosisBusy||!activeId}><Plus size={16}/> 진단 추가</button>
+   </form>
   </div>
   <form onSubmit={createNote} className="soap-form">
    <label>작성자<input value={form.author} onChange={e=>setForm(f=>({...f,author:e.target.value}))} required/></label>

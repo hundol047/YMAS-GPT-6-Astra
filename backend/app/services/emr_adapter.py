@@ -144,15 +144,59 @@ def _weight_kg(value_quantity):
     return None
 
 
+class TokenProvider(ABC):
+    """How FHIRAdapter gets the bearer token for a request. Two implementations, chosen by
+    FHIR_AUTH_MODE (see build_adapter() in main.py) -- never both at once, so a deployment is
+    always unambiguously in one mode or the other."""
+    @abstractmethod
+    def get_token(self) -> Optional[str]: ...
+
+
+class ClientCredentialsTokenProvider(TokenProvider):
+    """FHIR_AUTH_MODE=client_credentials (the default, unchanged from before this round): one
+    shared app-level token from SmartOAuthClient's client_credentials grant, the same token for
+    every request regardless of which clinician/browser is asking."""
+    def __init__(self, oauth: Optional[SmartOAuthClient]):
+        self.oauth = oauth
+
+    def get_token(self):
+        return self.oauth.token() if self.oauth else None
+
+
+class SmartSessionTokenProvider(TokenProvider):
+    """FHIR_AUTH_MODE=smart: use the per-clinician access token that /smart/callback stored in
+    smart_launch.SESSIONS for the CURRENT REQUEST's session, via the synex_session HttpOnly
+    cookie -- never the previous client_credentials flow. main.py's smart_session_context
+    middleware sets smart_launch.CURRENT_SESSION_ID for the lifetime of each request from that
+    cookie; this class only ever reads it back, and only ever asks SESSIONS.token_for() (the
+    session store's one internal-use accessor -- see its docstring on why the token never
+    otherwise leaves storage). If the request carries no SMART session (no launch happened, or it
+    expired), there is no token to use and get_token() returns None -- the resulting FHIR call
+    goes out unauthenticated, the same fallback client_credentials mode already has with no
+    oauth configured."""
+    def get_token(self):
+        from .smart_launch import CURRENT_SESSION_ID, SESSIONS
+        session_id = CURRENT_SESSION_ID.get()
+        if not session_id:
+            return None
+        return SESSIONS.token_for(session_id)
+
+
 class FHIRAdapter(BaseEMRAdapter):
-    def __init__(self, base_url=None, oauth: Optional[SmartOAuthClient]=None, transport=None):
+    def __init__(self, base_url=None, oauth: Optional[SmartOAuthClient]=None,
+                 token_provider: Optional[TokenProvider]=None, transport=None):
         self.base_url=(base_url or os.environ['FHIR_BASE_URL']).rstrip('/')
         self.oauth=oauth
+        # token_provider wins when given (FHIR_AUTH_MODE=smart); otherwise fall back to the
+        # existing client_credentials behavior, unchanged -- oauth=None still means "no
+        # Authorization header at all", same as before this round.
+        self.token_provider=token_provider or ClientCredentialsTokenProvider(oauth)
         self._client=httpx.Client(transport=transport, timeout=15)
 
     def _get(self, path, params=None):
         headers={'Accept':'application/fhir+json'}
-        if self.oauth:headers['Authorization']=f'Bearer {self.oauth.token()}'
+        token=self.token_provider.get_token()
+        if token:headers['Authorization']=f'Bearer {token}'
         r=self._client.get(f'{self.base_url}/{path}', params=params, headers=headers)
         r.raise_for_status()
         return r.json()

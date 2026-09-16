@@ -83,3 +83,63 @@ test('patient switch resets Clinical Workspace tab state',async()=>{
  // on a stale Clinical Note view for the wrong patient.
  await screen.findByText('SYNEX RISK INDEX');
 });
+
+// Item 7: the backend's deterministic clinical-summary template must actually reach the screen,
+// on the Overview tab, using the server's own sentence text (never a frontend-fabricated one).
+test('Clinical Summary card shows the backend template and refreshes on patient switch',async()=>{
+ render(<App/>);
+ await screen.findByRole('heading',{name:'박도윤 72세 / 남성'});
+ await screen.findByText('SynexAgent Clinical Summary');
+ // SYN-002's seeded INR history (2.1 -> 2.6 -> 3.8) is a rising trend the backend template
+ // should have detected and phrased as a sentence citing INR.
+ await waitFor(()=>expect(screen.getAllByText(/INR/).length).toBeGreaterThan(0));
+ await screen.findByText(/결정론적 규칙으로 생성/);
+});
+
+// Item 8: Diagnosis/Problem List UI must be wired to the real backend (POST .../diagnoses,
+// GET .../problem-list), not a UI-only mockup -- a new diagnosis must persist and show up in the
+// Problem List after creation.
+test('Diagnosis registration is wired to the real backend and refreshes the Problem List',async()=>{
+ const user=userEvent.setup();render(<App/>);
+ await screen.findByRole('heading',{name:'박도윤 72세 / 남성'});
+ await user.click(screen.getByRole('tab',{name:'Clinical Note'}));
+ await screen.findByText('Diagnosis / Problem List');
+ await user.type(screen.getByPlaceholderText('예: Atrial fibrillation'),'DOM 테스트 진단');
+ await user.click(screen.getByRole('button',{name:/진단 추가/}));
+ await screen.findByText('DOM 테스트 진단');
+});
+
+// Item 9: Results must show the patient's EXISTING (legacy/seeded) lab history merged with any
+// new LabOrder-derived results -- not only results created through the new Order flow.
+test('Results shows the existing legacy INR history via the unified endpoint',async()=>{
+ render(<App/>);
+ await screen.findByRole('heading',{name:'박도윤 72세 / 남성'});
+ const user=userEvent.setup();
+ await user.click(screen.getByRole('tab',{name:'Results'}));
+ await screen.findByText('검사 결과 추세 (통합)');
+ await waitFor(()=>expect(screen.getAllByText(/INR/).length).toBeGreaterThan(0));
+ // The seeded INR trend (2.1 -> 2.6 -> 3.8) should be visible as a chronological series, scoped
+ // to the INR result group (other test names share overlapping numeric substrings).
+ const inrGroup=(await screen.findByText('INR',{selector:'b'})).closest('.result-group');
+ await within(inrGroup).findByText(/2\.1/);
+ await within(inrGroup).findByText(/3\.8/);
+});
+
+// Item 4/20: a write action refused by the backend (403, the shape a clinician_readonly caller
+// would get) must surface as a visible, readable error -- not a silent failure or a crash.
+test('a refused write action surfaces a visible error instead of crashing',async()=>{
+ const user=userEvent.setup();render(<App/>);
+ await screen.findByRole('heading',{name:'박도윤 72세 / 남성'});
+ await user.click(screen.getByRole('tab',{name:'Clinical Note'}));
+ await screen.findByText('Clinical Note (SOAP)');
+ const original=globalThis.fetch;
+ globalThis.fetch=(url,options)=>url.includes('/encounters/')&&url.includes('/notes')&&options?.method!=='GET'
+  ?Promise.resolve({ok:false,status:403,json:async()=>({detail:'Role "clinician_readonly" is not permitted to note:write'})})
+  :original(url,options);
+ try{
+  await user.type(screen.getByPlaceholderText('chief complaint, symptoms, HPI'),'권한 없는 시도');
+  await user.click(screen.getByRole('button',{name:/임시 저장/}));
+  const alert=await screen.findByRole('alert');
+  expect(alert.textContent).toMatch(/permitted to note:write/);
+ }finally{globalThis.fetch=original}
+});

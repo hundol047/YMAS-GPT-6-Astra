@@ -22,10 +22,17 @@ State is kept in one of two backends, chosen at import time:
   multi-worker deployment still needs Redis (or a real shared DB) to keep an in-flight SMART launch
   visible to whichever worker handles the callback.
 """
-import base64, hashlib, json, os, secrets, sqlite3
+import base64, contextvars, hashlib, json, os, secrets, sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 import httpx
+
+# Set by main.py's smart_session_context middleware from the synex_session HttpOnly cookie, for
+# the lifetime of one request -- lets emr_adapter.SmartSessionTokenProvider find "this request's
+# SMART session" without threading a session_id through every adapter.get(pid) call site. Never
+# holds a token itself, only an opaque session_id (same thing the browser cookie carries).
+CURRENT_SESSION_ID: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('current_smart_session_id', default=None)
 
 _DEFAULT_LAUNCH_DB = Path(__file__).resolve().parents[2] / 'data' / 'smart_launch.sqlite3'
 LAUNCH_TTL_SECONDS = 600  # generous for a browser auth redirect round-trip; not a security boundary

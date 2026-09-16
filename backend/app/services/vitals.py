@@ -29,13 +29,16 @@ def flag(name, value):
     policy = RANGES.get(name)
     if not policy:
         return None
-    if 'critical_low' in policy and value <= policy['critical_low']:
+    # Each threshold is only compared when the policy actually sets it to a number -- a field can
+    # legitimately have no critical_high (e.g. SpO2, whose max possible value is 100 so "critical
+    # on the high end" is not a meaningful concept; see vital_reference_ranges.json).
+    if policy.get('critical_low') is not None and value <= policy['critical_low']:
         return 'critical'
-    if 'critical_high' in policy and value >= policy['critical_high']:
+    if policy.get('critical_high') is not None and value >= policy['critical_high']:
         return 'critical'
-    if 'low' in policy and value < policy['low']:
+    if policy.get('low') is not None and value < policy['low']:
         return 'low'
-    if 'high' in policy and value > policy['high']:
+    if policy.get('high') is not None and value > policy['high']:
         return 'high'
     return 'normal'
 
