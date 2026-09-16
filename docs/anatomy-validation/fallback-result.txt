@@ -1,0 +1,1 @@
+PASS: Missing GLB falls back to interactive procedural anatomy; alert evidence still opens.

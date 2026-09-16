@@ -1,0 +1,25 @@
+{
+  "_readme": "Deployment profiles for NVIDIA Jetson AGX Orin. Each profile pins the exact JetPack/L4T/CUDA/cuDNN/TensorRT/Python/Docker-base combination a working deployment was BUILT AND VERIFIED against on real hardware. When a new JetPack ships, add a NEW profile entry here (never edit an existing one's version numbers) and re-run scripts/verify_jetson_agx_gpu.py + scripts/deploy_jetson_agx.sh on the real device to fill it in and flip verified to true. Never mark a profile verified from documentation alone -- only from a real run's output.",
+  "profiles": [
+    {
+      "id": "unverified-template",
+      "verified": false,
+      "verified_on": null,
+      "hardware": "NVIDIA Jetson AGX Orin",
+      "jetpack": null,
+      "l4t": null,
+      "ubuntu": null,
+      "python": null,
+      "python_abi": null,
+      "cuda": null,
+      "cudnn": null,
+      "tensorrt": null,
+      "docker_base_image": null,
+      "onnxruntime_source": "Jetson-specific ARM64 GPU build (e.g. from the Jetson Zoo or NVIDIA's own ORT wheel for the matching JetPack) -- never a generic x86 PyPI wheel",
+      "onnxruntime_version": null,
+      "supported_providers": ["CPUExecutionProvider"],
+      "notes": "Placeholder. Populate every null field from scripts/verify_jetson_agx_gpu.py's actual output on the target device -- do not fill in guessed version numbers."
+    }
+  ],
+  "selection_policy": "If the device's detected JetPack/L4T does not exactly match any profile with verified=true, deploy_jetson_agx.sh must refuse to install a GPU wheel and instead run in CPU Safe Mode (CPUExecutionProvider only). This file ships with zero verified profiles because no run against real AGX Orin hardware has happened from this development environment."
+}

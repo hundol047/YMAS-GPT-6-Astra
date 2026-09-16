@@ -1,0 +1,19 @@
+{
+  "checks": [
+    "3D tab and real WebGL render",
+    "Kidney evidence and camera focus",
+    "Mesh click updates selected organ: 간",
+    "Anatomy to alert",
+    "Alert to anatomy",
+    "Camera presets",
+    "Actual clipping changes rendered surface",
+    "Slice position synchronizes 2D reference",
+    "Three section orientations",
+    "Organ visibility",
+    "Patient switch clears stale targets without leaving tab",
+    "Mobile layout without horizontal overflow",
+    "No browser console/page errors in normal operation",
+    "WebGL context-loss fallback preserves evidence"
+  ],
+  "errors": []
+}

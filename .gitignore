@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+node_modules/
+frontend/dist/
+.env
+.env.local
+.env.test.local
+*.sqlite3*
+*.engine
+*.log
+.sites-runtime/
+
+# Root-level intermediate copies from build_real_anatomy.py (the served copies under
+# frontend/public/models/anatomy/*.glb are tracked -- see that folder's README.md for how
+# to regenerate them).
+/anatomy.glb
+/extras.glb
+bp3d_repo

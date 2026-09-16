@@ -1,0 +1,112 @@
+[
+  {
+    "path": ".gitignore",
+    "bytes": 19,
+    "sha256": "862263fa1f46c20f0d1e4dac5ffcc75abd55c08211b2c3864c5f8764b9d87793"
+  },
+  {
+    "path": "README.md",
+    "bytes": 17547,
+    "sha256": "3eb83da048c10d1100c6e7d1c492e860f85fe7e6ff5aab42bde95b056dcca93b"
+  },
+  {
+    "path": "build_dataset_v2.py",
+    "bytes": 8649,
+    "sha256": "d5f3dd264c8a487c5b09bfa6c2b0b0e2b5a428058de3d80c5e823228a7036997"
+  },
+  {
+    "path": "build_dataset_v3.py",
+    "bytes": 5935,
+    "sha256": "a0e15d917bad9003eec052695816de0f38bbbcd237ba8325b1839eb0e1574273"
+  },
+  {
+    "path": "crossval_v3.py",
+    "bytes": 5244,
+    "sha256": "18544071d026947a628d10fc844192b255cc4b3776909b43caf844c51dcd21d5"
+  },
+  {
+    "path": "data/risk_training_data.csv",
+    "bytes": 13023271,
+    "sha256": "bc6da1bd3424e77374b3e6ce16fc702eb500dbe783dc431c9df6f1a1ff7fd436"
+  },
+  {
+    "path": "data/risk_training_data_v2.csv",
+    "bytes": 9170547,
+    "sha256": "63eb3998a154129a986eed8f4f154591fb0d39a6847b41f31daa2c3be4a3d6f3"
+  },
+  {
+    "path": "data/risk_training_data_v3.csv",
+    "bytes": 10820085,
+    "sha256": "3afd5372501776e4d3843a1b8e148406ee9303f9ee905dbde98f5bfd3ad33ed7"
+  },
+  {
+    "path": "drug_catalog.json",
+    "bytes": 37507,
+    "sha256": "6713f2bab2fdce93437c447f35686758c22c1f73d0495df801d9a964c5e07370"
+  },
+  {
+    "path": "export_csv.py",
+    "bytes": 2024,
+    "sha256": "c06dc8eecfdd34de92ade510b602f7d99fd697b2959bd1584beb5aab10e0ab11"
+  },
+  {
+    "path": "requirements.txt",
+    "bytes": 23,
+    "sha256": "6b8be1740178a8ef4c3363d82ee06ec529fecc849e2dfb3d25ec27169ab9553a"
+  },
+  {
+    "path": "risk_model_deep.onnx",
+    "bytes": 17496,
+    "sha256": "61fa11e6adddbf6776e53fc9fff46529e30acb980fcca1b3e914782d5f864958"
+  },
+  {
+    "path": "risk_model_deep.pt",
+    "bytes": 24233,
+    "sha256": "f16d0215b063c954d8173fbcf2670cff1ab321012b556faf839b61298968c9ae"
+  },
+  {
+    "path": "risk_model_deep_v2.onnx",
+    "bytes": 55778,
+    "sha256": "e1010e7f196694e6e1da63289298d9e5d978366f5e247710cbd0d1c9fefe2b4a"
+  },
+  {
+    "path": "risk_model_deep_v2.pt",
+    "bytes": 64269,
+    "sha256": "f37755e8e875a27d1650844e39ee9d5be1d0f9bc491945318b477803b5d531ca"
+  },
+  {
+    "path": "risk_model_deep_v3.onnx",
+    "bytes": 55778,
+    "sha256": "2c498e8035bca010a29a8b6221acf090d32db00d8feec1e0231246072205e517"
+  },
+  {
+    "path": "risk_model_deep_v3.pt",
+    "bytes": 64269,
+    "sha256": "f7df3ea7f121fd902cf661c102d8132e8c6a5f1af58c636bf775c20f8673a372"
+  },
+  {
+    "path": "rules.json",
+    "bytes": 47418,
+    "sha256": "e1fa51c61173e27aed3a91f19482b8e58344cfc5c949acc38884f018395d5d1e"
+  },
+  {
+    "path": "test_build_dataset.py",
+    "bytes": 2651,
+    "sha256": "156fc1ba58dabd73364b413d798617fc5ac5b02d8c11ec4e2fa747cb54464735"
+  },
+  {
+    "path": "train_deep.py",
+    "bytes": 7965,
+    "sha256": "4570b52e3f2b35b3b5f769c8413bceb7aa6686dfd72bc80e8a5e08bd54e3efa7"
+  },
+  {
+    "path": "train_deep_v2.py",
+    "bytes": 7269,
+    "sha256": "c0ca9ae02fbdc4bddaec79ef308dd758bd8f12bc340522bacff1727a09737b8b"
+  },
+  {
+    "path": "train_deep_v3.py",
+    "bytes": 7207,
+    "sha256": "2266cac077315f5865bb16bf2f7aa905ddcb79613ff835618f1889084b430aea"
+  }
+]

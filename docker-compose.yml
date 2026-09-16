@@ -1,0 +1,15 @@
+services:
+  synexagent:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      SYNEX_PROVIDER: cpu
+      SYNEX_AUDIT_PATH: /app/runtime/audit.sqlite3
+    volumes:
+      - synex-audit:/app/runtime
+    restart: unless-stopped
+volumes:
+  synex-audit:
