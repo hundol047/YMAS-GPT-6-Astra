@@ -1403,6 +1403,1038 @@
       "b": "hydrochlorothiazide",
       "severity": "위험",
       "reason": "티아자이드 이뇨제로 인한 저칼륨혈증이 디곡신 독성(부정맥) 위험을 높일 수 있음"
+    },
+    {
+      "a": "simvastatin",
+      "b": "fluconazole",
+      "severity": "위험",
+      "reason": "플루코나졸의 CYP3A4 억제로 심바스타틴 혈중농도가 상승해 근육병증(횡문근융해) 위험이 증가할 수 있음"
+    },
+    {
+      "a": "simvastatin",
+      "b": "diltiazem",
+      "severity": "위험",
+      "reason": "딜티아젬의 CYP3A4 억제로 심바스타틴 혈중농도가 상승해 근육병증(횡문근융해) 위험이 증가할 수 있음"
+    },
+    {
+      "a": "atorvastatin",
+      "b": "clarithromycin",
+      "severity": "주의",
+      "reason": "클래리스로마이신의 CYP3A4 억제로 아토르바스타틴 혈중농도가 상승해 근육병증(횡문근융해) 위험이 증가할 수 있음"
+    },
+    {
+      "a": "atorvastatin",
+      "b": "fluconazole",
+      "severity": "주의",
+      "reason": "플루코나졸의 CYP3A4 억제로 아토르바스타틴 혈중농도가 상승해 근육병증(횡문근융해) 위험이 증가할 수 있음"
+    },
+    {
+      "a": "atorvastatin",
+      "b": "diltiazem",
+      "severity": "주의",
+      "reason": "딜티아젬의 CYP3A4 억제로 아토르바스타틴 혈중농도가 상승해 근육병증(횡문근융해) 위험이 증가할 수 있음"
+    },
+    {
+      "a": "atorvastatin",
+      "b": "amiodarone",
+      "severity": "주의",
+      "reason": "아미오다론의 CYP3A4 억제로 아토르바스타틴 혈중농도가 상승해 근육병증(횡문근융해) 위험이 증가할 수 있음"
+    },
+    {
+      "a": "warfarin",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)과 와파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "warfarin",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)과 와파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "apixaban",
+      "b": "ibuprofen",
+      "severity": "위험",
+      "reason": "이부프로펜(NSAID)과 아픽사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "apixaban",
+      "b": "celecoxib",
+      "severity": "위험",
+      "reason": "셀레콕시브(NSAID)과 아픽사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "apixaban",
+      "b": "naproxen",
+      "severity": "위험",
+      "reason": "나프록센(NSAID)과 아픽사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "apixaban",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)과 아픽사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "apixaban",
+      "b": "meloxicam",
+      "severity": "위험",
+      "reason": "멜록시캄(NSAID)과 아픽사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "apixaban",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)과 아픽사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "rivaroxaban",
+      "b": "ibuprofen",
+      "severity": "위험",
+      "reason": "이부프로펜(NSAID)과 리바록사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "rivaroxaban",
+      "b": "celecoxib",
+      "severity": "위험",
+      "reason": "셀레콕시브(NSAID)과 리바록사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "rivaroxaban",
+      "b": "naproxen",
+      "severity": "위험",
+      "reason": "나프록센(NSAID)과 리바록사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "rivaroxaban",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)과 리바록사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "rivaroxaban",
+      "b": "meloxicam",
+      "severity": "위험",
+      "reason": "멜록시캄(NSAID)과 리바록사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "rivaroxaban",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)과 리바록사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "dabigatran",
+      "b": "ibuprofen",
+      "severity": "위험",
+      "reason": "이부프로펜(NSAID)과 다비가트란 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "dabigatran",
+      "b": "celecoxib",
+      "severity": "위험",
+      "reason": "셀레콕시브(NSAID)과 다비가트란 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "dabigatran",
+      "b": "naproxen",
+      "severity": "위험",
+      "reason": "나프록센(NSAID)과 다비가트란 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "dabigatran",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)과 다비가트란 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "dabigatran",
+      "b": "meloxicam",
+      "severity": "위험",
+      "reason": "멜록시캄(NSAID)과 다비가트란 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "dabigatran",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)과 다비가트란 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "edoxaban",
+      "b": "ibuprofen",
+      "severity": "위험",
+      "reason": "이부프로펜(NSAID)과 에독사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "edoxaban",
+      "b": "celecoxib",
+      "severity": "위험",
+      "reason": "셀레콕시브(NSAID)과 에독사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "edoxaban",
+      "b": "naproxen",
+      "severity": "위험",
+      "reason": "나프록센(NSAID)과 에독사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "edoxaban",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)과 에독사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "edoxaban",
+      "b": "meloxicam",
+      "severity": "위험",
+      "reason": "멜록시캄(NSAID)과 에독사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "edoxaban",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)과 에독사반 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "enoxaparin",
+      "b": "ibuprofen",
+      "severity": "위험",
+      "reason": "이부프로펜(NSAID)과 에녹사파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "enoxaparin",
+      "b": "celecoxib",
+      "severity": "위험",
+      "reason": "셀레콕시브(NSAID)과 에녹사파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "enoxaparin",
+      "b": "naproxen",
+      "severity": "위험",
+      "reason": "나프록센(NSAID)과 에녹사파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "enoxaparin",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)과 에녹사파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "enoxaparin",
+      "b": "meloxicam",
+      "severity": "위험",
+      "reason": "멜록시캄(NSAID)과 에녹사파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "enoxaparin",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)과 에녹사파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "heparin",
+      "b": "ibuprofen",
+      "severity": "위험",
+      "reason": "이부프로펜(NSAID)과 헤파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "heparin",
+      "b": "celecoxib",
+      "severity": "위험",
+      "reason": "셀레콕시브(NSAID)과 헤파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "heparin",
+      "b": "naproxen",
+      "severity": "위험",
+      "reason": "나프록센(NSAID)과 헤파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "heparin",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)과 헤파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "heparin",
+      "b": "meloxicam",
+      "severity": "위험",
+      "reason": "멜록시캄(NSAID)과 헤파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "heparin",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)과 헤파린 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "clopidogrel",
+      "b": "ibuprofen",
+      "severity": "위험",
+      "reason": "이부프로펜(NSAID)과 클로피도그렐 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "clopidogrel",
+      "b": "celecoxib",
+      "severity": "위험",
+      "reason": "셀레콕시브(NSAID)과 클로피도그렐 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "clopidogrel",
+      "b": "naproxen",
+      "severity": "위험",
+      "reason": "나프록센(NSAID)과 클로피도그렐 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "clopidogrel",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)과 클로피도그렐 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "clopidogrel",
+      "b": "meloxicam",
+      "severity": "위험",
+      "reason": "멜록시캄(NSAID)과 클로피도그렐 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "clopidogrel",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)과 클로피도그렐 병용 시 항응고·항혈소판 효과가 중첩되어 출혈 위험이 증가할 수 있음"
+    },
+    {
+      "a": "escitalopram",
+      "b": "tramadol",
+      "severity": "위험",
+      "reason": "에스시탈로프람과 트라마돌 병용 시 세로토닌 증후군 위험 증가 — 두 약물 모두 세로토닌계에 작용"
+    },
+    {
+      "a": "duloxetine",
+      "b": "tramadol",
+      "severity": "위험",
+      "reason": "둘록세틴과 트라마돌 병용 시 세로토닌 증후군 위험 증가 — 두 약물 모두 세로토닌계에 작용"
+    },
+    {
+      "a": "venlafaxine",
+      "b": "tramadol",
+      "severity": "위험",
+      "reason": "벤라팍신과 트라마돌 병용 시 세로토닌 증후군 위험 증가 — 두 약물 모두 세로토닌계에 작용"
+    },
+    {
+      "a": "lorazepam",
+      "b": "tramadol",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(로라제팜)와 오피오이드(트라마돌) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "lorazepam",
+      "b": "morphine",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(로라제팜)와 오피오이드(모르핀) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "lorazepam",
+      "b": "oxycodone",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(로라제팜)와 오피오이드(옥시코돈) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "lorazepam",
+      "b": "fentanyl_patch",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(로라제팜)와 오피오이드(펜타닐 패치) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "diazepam",
+      "b": "tramadol",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(디아제팜)와 오피오이드(트라마돌) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "diazepam",
+      "b": "morphine",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(디아제팜)와 오피오이드(모르핀) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "diazepam",
+      "b": "oxycodone",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(디아제팜)와 오피오이드(옥시코돈) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "diazepam",
+      "b": "fentanyl_patch",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(디아제팜)와 오피오이드(펜타닐 패치) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "clonazepam",
+      "b": "tramadol",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(클로나제팜)와 오피오이드(트라마돌) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "clonazepam",
+      "b": "morphine",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(클로나제팜)와 오피오이드(모르핀) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "clonazepam",
+      "b": "oxycodone",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(클로나제팜)와 오피오이드(옥시코돈) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "clonazepam",
+      "b": "fentanyl_patch",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(클로나제팜)와 오피오이드(펜타닐 패치) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "zolpidem",
+      "b": "tramadol",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(졸피뎀)와 오피오이드(트라마돌) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "zolpidem",
+      "b": "morphine",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(졸피뎀)와 오피오이드(모르핀) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "zolpidem",
+      "b": "oxycodone",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(졸피뎀)와 오피오이드(옥시코돈) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "zolpidem",
+      "b": "fentanyl_patch",
+      "severity": "위험",
+      "reason": "벤조디아제핀계(졸피뎀)와 오피오이드(펜타닐 패치) 병용 시 과진정·호흡억제 위험 증가 — FDA 병용경고 대상"
+    },
+    {
+      "a": "amiodarone",
+      "b": "ciprofloxacin",
+      "severity": "주의",
+      "reason": "아미오다론과 시프로플록사신 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "amiodarone",
+      "b": "levofloxacin",
+      "severity": "주의",
+      "reason": "아미오다론과 레보플록사신 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "amiodarone",
+      "b": "ondansetron",
+      "severity": "주의",
+      "reason": "아미오다론과 온단세트론 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "amiodarone",
+      "b": "ondansetron_peds",
+      "severity": "주의",
+      "reason": "아미오다론과 온단세트론(소아용) 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "amiodarone",
+      "b": "haloperidol",
+      "severity": "주의",
+      "reason": "아미오다론과 할로페리돌 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "amiodarone",
+      "b": "escitalopram",
+      "severity": "주의",
+      "reason": "아미오다론과 에스시탈로프람 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ciprofloxacin",
+      "b": "levofloxacin",
+      "severity": "주의",
+      "reason": "시프로플록사신과 레보플록사신 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ciprofloxacin",
+      "b": "ondansetron",
+      "severity": "주의",
+      "reason": "시프로플록사신과 온단세트론 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ciprofloxacin",
+      "b": "ondansetron_peds",
+      "severity": "주의",
+      "reason": "시프로플록사신과 온단세트론(소아용) 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ciprofloxacin",
+      "b": "haloperidol",
+      "severity": "주의",
+      "reason": "시프로플록사신과 할로페리돌 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ciprofloxacin",
+      "b": "escitalopram",
+      "severity": "주의",
+      "reason": "시프로플록사신과 에스시탈로프람 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "levofloxacin",
+      "b": "ondansetron",
+      "severity": "주의",
+      "reason": "레보플록사신과 온단세트론 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "levofloxacin",
+      "b": "ondansetron_peds",
+      "severity": "주의",
+      "reason": "레보플록사신과 온단세트론(소아용) 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "levofloxacin",
+      "b": "haloperidol",
+      "severity": "주의",
+      "reason": "레보플록사신과 할로페리돌 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "levofloxacin",
+      "b": "escitalopram",
+      "severity": "주의",
+      "reason": "레보플록사신과 에스시탈로프람 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ondansetron",
+      "b": "ondansetron_peds",
+      "severity": "주의",
+      "reason": "온단세트론과 온단세트론(소아용) 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ondansetron",
+      "b": "haloperidol",
+      "severity": "주의",
+      "reason": "온단세트론과 할로페리돌 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ondansetron",
+      "b": "escitalopram",
+      "severity": "주의",
+      "reason": "온단세트론과 에스시탈로프람 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ondansetron_peds",
+      "b": "haloperidol",
+      "severity": "주의",
+      "reason": "온단세트론(소아용)과 할로페리돌 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "ondansetron_peds",
+      "b": "escitalopram",
+      "severity": "주의",
+      "reason": "온단세트론(소아용)과 에스시탈로프람 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "haloperidol",
+      "b": "escitalopram",
+      "severity": "주의",
+      "reason": "할로페리돌과 에스시탈로프람 모두 QT 간격을 연장시킬 수 있어 병용 시 torsades de pointes 등 심실부정맥 위험 증가"
+    },
+    {
+      "a": "enalapril",
+      "b": "losartan",
+      "severity": "주의",
+      "reason": "에날라프릴(ACE 억제제)와 로사탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "enalapril",
+      "b": "valsartan",
+      "severity": "주의",
+      "reason": "에날라프릴(ACE 억제제)와 발사르탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "enalapril",
+      "b": "candesartan",
+      "severity": "주의",
+      "reason": "에날라프릴(ACE 억제제)와 칸데사르탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "enalapril",
+      "b": "telmisartan",
+      "severity": "주의",
+      "reason": "에날라프릴(ACE 억제제)와 텔미사르탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "lisinopril",
+      "b": "valsartan",
+      "severity": "주의",
+      "reason": "리시노프릴(ACE 억제제)와 발사르탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "lisinopril",
+      "b": "candesartan",
+      "severity": "주의",
+      "reason": "리시노프릴(ACE 억제제)와 칸데사르탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "lisinopril",
+      "b": "telmisartan",
+      "severity": "주의",
+      "reason": "리시노프릴(ACE 억제제)와 텔미사르탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "ramipril",
+      "b": "losartan",
+      "severity": "주의",
+      "reason": "라미프릴(ACE 억제제)와 로사탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "ramipril",
+      "b": "valsartan",
+      "severity": "주의",
+      "reason": "라미프릴(ACE 억제제)와 발사르탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "ramipril",
+      "b": "candesartan",
+      "severity": "주의",
+      "reason": "라미프릴(ACE 억제제)와 칸데사르탄(ARB) 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "enalapril",
+      "b": "spironolactone",
+      "severity": "위험",
+      "reason": "에날라프릴와 스피로놀락톤(칼륨보존 이뇨제) 병용 시 고칼륨혈증 위험 증가 — 혈중 칼륨 모니터링 필요"
+    },
+    {
+      "a": "losartan",
+      "b": "spironolactone",
+      "severity": "위험",
+      "reason": "로사탄와 스피로놀락톤(칼륨보존 이뇨제) 병용 시 고칼륨혈증 위험 증가 — 혈중 칼륨 모니터링 필요"
+    },
+    {
+      "a": "candesartan",
+      "b": "spironolactone",
+      "severity": "위험",
+      "reason": "칸데사르탄와 스피로놀락톤(칼륨보존 이뇨제) 병용 시 고칼륨혈증 위험 증가 — 혈중 칼륨 모니터링 필요"
+    },
+    {
+      "a": "telmisartan",
+      "b": "spironolactone",
+      "severity": "위험",
+      "reason": "텔미사르탄와 스피로놀락톤(칼륨보존 이뇨제) 병용 시 고칼륨혈증 위험 증가 — 혈중 칼륨 모니터링 필요"
+    },
+    {
+      "a": "enalapril",
+      "b": "ibuprofen",
+      "severity": "주의",
+      "reason": "이부프로펜(NSAID)이 에날라프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "enalapril",
+      "b": "celecoxib",
+      "severity": "주의",
+      "reason": "셀레콕시브(NSAID)이 에날라프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "enalapril",
+      "b": "naproxen",
+      "severity": "주의",
+      "reason": "나프록센(NSAID)이 에날라프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "enalapril",
+      "b": "diclofenac",
+      "severity": "주의",
+      "reason": "디클로페낙(NSAID)이 에날라프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "enalapril",
+      "b": "meloxicam",
+      "severity": "주의",
+      "reason": "멜록시캄(NSAID)이 에날라프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "enalapril",
+      "b": "ketorolac",
+      "severity": "주의",
+      "reason": "케토롤락(NSAID)이 에날라프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "lisinopril",
+      "b": "celecoxib",
+      "severity": "주의",
+      "reason": "셀레콕시브(NSAID)이 리시노프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "lisinopril",
+      "b": "naproxen",
+      "severity": "주의",
+      "reason": "나프록센(NSAID)이 리시노프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "lisinopril",
+      "b": "diclofenac",
+      "severity": "주의",
+      "reason": "디클로페낙(NSAID)이 리시노프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "lisinopril",
+      "b": "meloxicam",
+      "severity": "주의",
+      "reason": "멜록시캄(NSAID)이 리시노프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "lisinopril",
+      "b": "ketorolac",
+      "severity": "주의",
+      "reason": "케토롤락(NSAID)이 리시노프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "ramipril",
+      "b": "ibuprofen",
+      "severity": "주의",
+      "reason": "이부프로펜(NSAID)이 라미프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "ramipril",
+      "b": "celecoxib",
+      "severity": "주의",
+      "reason": "셀레콕시브(NSAID)이 라미프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "ramipril",
+      "b": "naproxen",
+      "severity": "주의",
+      "reason": "나프록센(NSAID)이 라미프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "ramipril",
+      "b": "diclofenac",
+      "severity": "주의",
+      "reason": "디클로페낙(NSAID)이 라미프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "ramipril",
+      "b": "meloxicam",
+      "severity": "주의",
+      "reason": "멜록시캄(NSAID)이 라미프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "ramipril",
+      "b": "ketorolac",
+      "severity": "주의",
+      "reason": "케토롤락(NSAID)이 라미프릴의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "losartan",
+      "b": "ibuprofen",
+      "severity": "주의",
+      "reason": "이부프로펜(NSAID)이 로사탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "losartan",
+      "b": "celecoxib",
+      "severity": "주의",
+      "reason": "셀레콕시브(NSAID)이 로사탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "losartan",
+      "b": "naproxen",
+      "severity": "주의",
+      "reason": "나프록센(NSAID)이 로사탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "losartan",
+      "b": "diclofenac",
+      "severity": "주의",
+      "reason": "디클로페낙(NSAID)이 로사탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "losartan",
+      "b": "meloxicam",
+      "severity": "주의",
+      "reason": "멜록시캄(NSAID)이 로사탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "losartan",
+      "b": "ketorolac",
+      "severity": "주의",
+      "reason": "케토롤락(NSAID)이 로사탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "valsartan",
+      "b": "ibuprofen",
+      "severity": "주의",
+      "reason": "이부프로펜(NSAID)이 발사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "valsartan",
+      "b": "celecoxib",
+      "severity": "주의",
+      "reason": "셀레콕시브(NSAID)이 발사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "valsartan",
+      "b": "naproxen",
+      "severity": "주의",
+      "reason": "나프록센(NSAID)이 발사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "valsartan",
+      "b": "diclofenac",
+      "severity": "주의",
+      "reason": "디클로페낙(NSAID)이 발사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "valsartan",
+      "b": "meloxicam",
+      "severity": "주의",
+      "reason": "멜록시캄(NSAID)이 발사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "valsartan",
+      "b": "ketorolac",
+      "severity": "주의",
+      "reason": "케토롤락(NSAID)이 발사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "candesartan",
+      "b": "ibuprofen",
+      "severity": "주의",
+      "reason": "이부프로펜(NSAID)이 칸데사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "candesartan",
+      "b": "celecoxib",
+      "severity": "주의",
+      "reason": "셀레콕시브(NSAID)이 칸데사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "candesartan",
+      "b": "naproxen",
+      "severity": "주의",
+      "reason": "나프록센(NSAID)이 칸데사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "candesartan",
+      "b": "diclofenac",
+      "severity": "주의",
+      "reason": "디클로페낙(NSAID)이 칸데사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "candesartan",
+      "b": "meloxicam",
+      "severity": "주의",
+      "reason": "멜록시캄(NSAID)이 칸데사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "candesartan",
+      "b": "ketorolac",
+      "severity": "주의",
+      "reason": "케토롤락(NSAID)이 칸데사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "telmisartan",
+      "b": "ibuprofen",
+      "severity": "주의",
+      "reason": "이부프로펜(NSAID)이 텔미사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "telmisartan",
+      "b": "celecoxib",
+      "severity": "주의",
+      "reason": "셀레콕시브(NSAID)이 텔미사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "telmisartan",
+      "b": "naproxen",
+      "severity": "주의",
+      "reason": "나프록센(NSAID)이 텔미사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "telmisartan",
+      "b": "diclofenac",
+      "severity": "주의",
+      "reason": "디클로페낙(NSAID)이 텔미사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "telmisartan",
+      "b": "meloxicam",
+      "severity": "주의",
+      "reason": "멜록시캄(NSAID)이 텔미사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "telmisartan",
+      "b": "ketorolac",
+      "severity": "주의",
+      "reason": "케토롤락(NSAID)이 텔미사르탄의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 추가 병용 시 급성신손상 위험 상승)"
+    },
+    {
+      "a": "phenytoin",
+      "b": "combined_oc",
+      "severity": "주의",
+      "reason": "페니토인의 강력한 간효소 유도 작용으로 경구피임제 대사가 빨라져 피임 효과가 저하될 수 있음"
+    },
+    {
+      "a": "carbamazepine",
+      "b": "combined_oc",
+      "severity": "주의",
+      "reason": "카바마제핀의 강력한 간효소 유도 작용으로 경구피임제 대사가 빨라져 피임 효과가 저하될 수 있음"
+    },
+    {
+      "a": "metoprolol",
+      "b": "glipizide",
+      "severity": "주의",
+      "reason": "베타차단제(메토프롤롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "metoprolol",
+      "b": "insulin_glargine",
+      "severity": "주의",
+      "reason": "베타차단제(메토프롤롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "metoprolol",
+      "b": "insulin_aspart",
+      "severity": "주의",
+      "reason": "베타차단제(메토프롤롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "carvedilol",
+      "b": "glimepiride",
+      "severity": "주의",
+      "reason": "베타차단제(카베딜롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "carvedilol",
+      "b": "glipizide",
+      "severity": "주의",
+      "reason": "베타차단제(카베딜롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "carvedilol",
+      "b": "insulin_glargine",
+      "severity": "주의",
+      "reason": "베타차단제(카베딜롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "carvedilol",
+      "b": "insulin_aspart",
+      "severity": "주의",
+      "reason": "베타차단제(카베딜롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "bisoprolol",
+      "b": "glimepiride",
+      "severity": "주의",
+      "reason": "베타차단제(비소프롤롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "bisoprolol",
+      "b": "glipizide",
+      "severity": "주의",
+      "reason": "베타차단제(비소프롤롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "bisoprolol",
+      "b": "insulin_glargine",
+      "severity": "주의",
+      "reason": "베타차단제(비소프롤롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "bisoprolol",
+      "b": "insulin_aspart",
+      "severity": "주의",
+      "reason": "베타차단제(비소프롤롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "propranolol",
+      "b": "glimepiride",
+      "severity": "주의",
+      "reason": "베타차단제(프로프라놀롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "propranolol",
+      "b": "glipizide",
+      "severity": "주의",
+      "reason": "베타차단제(프로프라놀롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "propranolol",
+      "b": "insulin_glargine",
+      "severity": "주의",
+      "reason": "베타차단제(프로프라놀롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "propranolol",
+      "b": "insulin_aspart",
+      "severity": "주의",
+      "reason": "베타차단제(프로프라놀롤)가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "digoxin",
+      "b": "torsemide",
+      "severity": "위험",
+      "reason": "루프 이뇨제로 인한 저칼륨혈증이 디곡신 독성(부정맥) 위험을 높일 수 있음"
+    },
+    {
+      "a": "warfarin",
+      "b": "amoxicillin",
+      "severity": "주의",
+      "reason": "장내세균총 변화로 비타민K 생성이 줄어 와파린 효과가 상승할 수 있음"
+    },
+    {
+      "a": "warfarin",
+      "b": "doxycycline",
+      "severity": "주의",
+      "reason": "테트라사이클린계 항생제는 와파린 대사에 영향을 주어 항응고 효과를 상승시킬 수 있음"
+    },
+    {
+      "a": "warfarin",
+      "b": "clindamycin_oral",
+      "severity": "주의",
+      "reason": "장내세균총 변화로 비타민K 생성이 줄어 와파린 효과가 상승할 수 있음"
+    },
+    {
+      "a": "methotrexate",
+      "b": "naproxen",
+      "severity": "위험",
+      "reason": "나프록센(NSAID)이 메토트렉세이트의 신장 배설을 감소시켜 골수억제 등 독성 위험 증가"
+    },
+    {
+      "a": "methotrexate",
+      "b": "celecoxib",
+      "severity": "위험",
+      "reason": "셀레콕시브(NSAID)이 메토트렉세이트의 신장 배설을 감소시켜 골수억제 등 독성 위험 증가"
+    },
+    {
+      "a": "methotrexate",
+      "b": "diclofenac",
+      "severity": "위험",
+      "reason": "디클로페낙(NSAID)이 메토트렉세이트의 신장 배설을 감소시켜 골수억제 등 독성 위험 증가"
+    },
+    {
+      "a": "methotrexate",
+      "b": "meloxicam",
+      "severity": "위험",
+      "reason": "멜록시캄(NSAID)이 메토트렉세이트의 신장 배설을 감소시켜 골수억제 등 독성 위험 증가"
+    },
+    {
+      "a": "methotrexate",
+      "b": "ketorolac",
+      "severity": "위험",
+      "reason": "케토롤락(NSAID)이 메토트렉세이트의 신장 배설을 감소시켜 골수억제 등 독성 위험 증가"
+    },
+    {
+      "a": "tamoxifen",
+      "b": "bupropion",
+      "severity": "주의",
+      "reason": "강력한 CYP2D6 억제로 타목시펜의 활성대사체(엔독시펜) 생성이 감소해 항암 효과가 저하될 수 있음"
     }
   ],
   "comorbid": [
@@ -1475,6 +2507,106 @@
       "drug": "dexamethasone",
       "condition": "고혈압",
       "reason": "전신 스테로이드는 혈압을 상승시켜 고혈압을 악화시킬 수 있음"
+    },
+    {
+      "drug": "ibuprofen",
+      "condition": "고혈압",
+      "reason": "이부프로펜(NSAID)은 혈압을 상승시키고 항고혈압제의 효과를 저하시킬 수 있음"
+    },
+    {
+      "drug": "celecoxib",
+      "condition": "고혈압",
+      "reason": "셀레콕시브(NSAID)은 혈압을 상승시키고 항고혈압제의 효과를 저하시킬 수 있음"
+    },
+    {
+      "drug": "meloxicam",
+      "condition": "고혈압",
+      "reason": "멜록시캄(NSAID)은 혈압을 상승시키고 항고혈압제의 효과를 저하시킬 수 있음"
+    },
+    {
+      "drug": "diclofenac",
+      "condition": "고혈압",
+      "reason": "디클로페낙(NSAID)은 혈압을 상승시키고 항고혈압제의 효과를 저하시킬 수 있음"
+    },
+    {
+      "drug": "ketorolac",
+      "condition": "고혈압",
+      "reason": "케토롤락(NSAID)은 혈압을 상승시키고 항고혈압제의 효과를 저하시킬 수 있음"
+    },
+    {
+      "drug": "naproxen",
+      "condition": "만성신부전",
+      "reason": "나프록센(NSAID)은 신기능을 추가로 악화시킬 수 있음"
+    },
+    {
+      "drug": "diclofenac",
+      "condition": "만성신부전",
+      "reason": "디클로페낙(NSAID)은 신기능을 추가로 악화시킬 수 있음"
+    },
+    {
+      "drug": "ketorolac",
+      "condition": "만성신부전",
+      "reason": "케토롤락(NSAID)은 신기능을 추가로 악화시킬 수 있음"
+    },
+    {
+      "drug": "prednisolone",
+      "condition": "고혈압",
+      "reason": "전신 스테로이드(프레드니솔론)는 혈압을 상승시켜 고혈압을 악화시킬 수 있음"
+    },
+    {
+      "drug": "methylprednisolone",
+      "condition": "고혈압",
+      "reason": "전신 스테로이드(메틸프레드니솔론)는 혈압을 상승시켜 고혈압을 악화시킬 수 있음"
+    },
+    {
+      "drug": "enalapril",
+      "condition": "고칼륨혈증",
+      "reason": "에날라프릴는 혈중 칼륨을 상승시켜 고칼륨혈증을 악화시킬 수 있음"
+    },
+    {
+      "drug": "ramipril",
+      "condition": "고칼륨혈증",
+      "reason": "라미프릴는 혈중 칼륨을 상승시켜 고칼륨혈증을 악화시킬 수 있음"
+    },
+    {
+      "drug": "losartan",
+      "condition": "고칼륨혈증",
+      "reason": "로사탄는 혈중 칼륨을 상승시켜 고칼륨혈증을 악화시킬 수 있음"
+    },
+    {
+      "drug": "valsartan",
+      "condition": "고칼륨혈증",
+      "reason": "발사르탄는 혈중 칼륨을 상승시켜 고칼륨혈증을 악화시킬 수 있음"
+    },
+    {
+      "drug": "candesartan",
+      "condition": "고칼륨혈증",
+      "reason": "칸데사르탄는 혈중 칼륨을 상승시켜 고칼륨혈증을 악화시킬 수 있음"
+    },
+    {
+      "drug": "telmisartan",
+      "condition": "고칼륨혈증",
+      "reason": "텔미사르탄는 혈중 칼륨을 상승시켜 고칼륨혈증을 악화시킬 수 있음"
+    },
+    {
+      "drug": "apixaban",
+      "condition": "만성신부전",
+      "reason": "신기능 저하 시 배설이 감소해 출혈 위험이 증가할 수 있음 — 신기능에 따른 용량 조정 필요"
+    },
+    {
+      "drug": "rivaroxaban",
+      "condition": "만성신부전",
+      "reason": "신기능 저하 시 배설이 감소해 출혈 위험이 증가할 수 있음 — 신기능에 따른 용량 조정 필요"
+    },
+    {
+      "drug": "dabigatran",
+      "condition": "만성신부전",
+      "reason": "주로 신장으로 배설되어 신기능 저하 시 축적 및 출혈 위험이 크게 증가할 수 있음"
+    },
+    {
+      "drug": "edoxaban",
+      "condition": "만성신부전",
+      "reason": "신기능 저하 시 배설이 감소해 출혈 위험이 증가할 수 있음 — 신기능에 따른 용량 조정 필요"
     }
   ],
   "allergy": {

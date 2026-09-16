@@ -1,5 +1,11 @@
 """Training-compatible counts are isolated from additional review signals.
 Supplied rules are prototype rules, NOT a clinically validated drug database.
+
+rules.json may keep growing with new prototype interaction/comorbid rules for clinician-facing
+alerts -- but rules_training_snapshot.json (an exact copy of rules.json as it stood when the v3
+model's training data was built; see docs/MODEL_CARD.md) must NEVER be edited. Any rule not
+present there is deferred out of danger_count/caution_count below (see evaluate()'s
+add_or_defer/deferred), however visible and correctly reasoned it is to the clinician.
 """
 import hashlib
 import json
@@ -14,6 +20,15 @@ DRUGS = {d['id']:d for d in CATALOG}
 RULES = json.loads((DATA/'rules.json').read_text(encoding='utf-8'))
 RULES_HASH = hashlib.sha256((DATA/'rules.json').read_bytes()).hexdigest()
 PAIRS = {frozenset((r['a'],r['b'])):(i,r) for i,r in enumerate(RULES['interactions'])}
+# Frozen exact copy of rules.json as it stood when the v3 RiskDeepMLP training data was built
+# (see research/original/rules.json / build_dataset_v2.py's own local rules.json). rules.json
+# above keeps growing with additional prototype interaction/comorbid rules for clinician-facing
+# alerts, but the model's drug_conflict feature must only ever reflect what it was actually
+# trained to recognize -- so a rule counts toward danger_count/caution_count (training=True) only
+# if it was already in this frozen snapshot, never just because it's in the current rules.json.
+TRAINING_SNAPSHOT = json.loads((DATA/'rules_training_snapshot.json').read_text(encoding='utf-8'))
+TRAINING_PAIRS = {frozenset((r['a'],r['b'])) for r in TRAINING_SNAPSHOT['interactions']}
+TRAINING_COMORBID = {(c['drug'],c['condition']) for c in TRAINING_SNAPSHOT['comorbid']}
 SEVERITY = {'NONE':0.,'MILD':.34,'MODERATE':.67,'SEVERE':1.,'UNKNOWN':0.}
 
 # Rule provenance/versioning. Every rule here is PROTOTYPE policy -- not sourced from an official
@@ -55,28 +70,39 @@ def evaluate(patient):
     active = [m for m in patient.medications if m.status=='active']
     ids = sorted({m.drug_id for m in active if m.drug_id in DRUGS})
     alerts=[]
+    deferred=[]  # prototype rules added after the original 224/10 training snapshot -- shown to
+                 # the clinician like any other alert, but never counted toward danger/caution
+                 # below, since the deployed model was never trained to recognize them.
     def add(*args,**kwargs): alerts.append(make_alert(*args,**kwargs))
+    def add_or_defer(is_training,*args,**kwargs):
+        (add if is_training else lambda *a,**k:deferred.append((a,k)))(*args,**kwargs)
     for a,b in combinations(ids,2):
         match=PAIRS.get(frozenset((a,b)))
         if match:
             i,r=match
-            add('drug_interaction','danger' if r['severity']=='위험' else 'caution',
-                f"{DRUGS[a]['name_ko']} + {DRUGS[b]['name_ko']}",r['reason'],[a,b],f'rules.json / interactions/{i}',True)
+            is_training=frozenset((a,b)) in TRAINING_PAIRS
+            add_or_defer(is_training,'drug_interaction','danger' if r['severity']=='위험' else 'caution',
+                f"{DRUGS[a]['name_ko']} + {DRUGS[b]['name_ko']}",r['reason'],[a,b],f'rules.json / interactions/{i}',is_training)
         if DRUGS[a]['group_ko'] and DRUGS[a]['group_ko']==DRUGS[b]['group_ko']:
             add('duplicate_group','caution',f"약물군 중복 · {DRUGS[a]['group_ko']}",
                 '카탈로그의 동일 약물군입니다. 병용 목적과 용량을 확인하십시오.',[a,b],'build_dataset_v2.audit / group_ko',True)
     for d in ids:
         for i,r in enumerate(RULES['comorbid']):
             if d==r['drug'] and r['condition'] in patient.conditions:
-                add('drug_condition','caution',f"{DRUGS[d]['name_ko']} · {r['condition']}",r['reason'],[d],f'rules.json / comorbid/{i}',True,{'condition':r['condition']})
+                is_training=(d,r['condition']) in TRAINING_COMORBID
+                add_or_defer(is_training,'drug_condition','caution',f"{DRUGS[d]['name_ko']} · {r['condition']}",r['reason'],[d],f'rules.json / comorbid/{i}',
+                    is_training,{'condition':r['condition']})
         cls=RULES['allergy'].get(d)
         hits=[a for a in patient.allergies if cls and cls in a.substance]
         if hits:
             add('allergy','danger',f"알레르기 이력 · {DRUGS[d]['name_ko']}",
                 f'{cls} 이력과 제공된 알레르기 규칙이 일치합니다. 원기록과 반응 유형을 확인하십시오.',[d],f'rules.json / allergy/{d}',True,{'allergies':[x.model_dump() for x in hits]})
-    # Freeze original training counts BEFORE adding new policy signals.
+    # Freeze original training counts BEFORE adding new policy signals (including the deferred
+    # post-snapshot rules above).
     danger=sum(a['severity']=='danger' for a in alerts)
     caution=sum(a['severity']=='caution' for a in alerts)
+    for args,kwargs in deferred:
+        add(*args,**kwargs)
     for d,n in Counter(m.drug_id for m in active).items():
         if n>1:
             add('duplicate_ingredient','caution','동일 약물 중복 기록',f'{d} 활성 처방 {n}건입니다. 중복 입력 또는 분할 처방인지 확인하십시오.',[d])

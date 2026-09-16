@@ -20,6 +20,8 @@
 
 제공 Synthea 기반 합성 데이터 CSV: v1 116,262행, v2 75,421행, v3 86,116행. v3 고위험 10,724행입니다. 원본 raw Synthea 생성 데이터는 ZIP에 없으므로 생성 과정 전체를 이번 작업에서 재현하지 않았습니다.
 
+**`backend/data/rules.json`을 이후에 계속 확장하더라도 이 학습 데이터/라벨 자체는 바뀌지 않습니다.** 이 파일이 학습 당시 실제로 사용된 규칙 집합의 정확한 사본이며, `backend/app/services/rule_engine.py`가 `backend/data/rules.json`의 어떤 상호작용/동반질환 규칙이 실제로 `drug_conflict`(danger_count/caution_count)에 반영되는지 판단하는 유일한 기준입니다 — **절대 수정하지 마십시오.** `rules.json`에 새 규칙을 추가하면(예: 임상적으로 잘 알려진 약물상호작용을 더 등록) 그 규칙은 환자에게 즉시 경고로 표시되지만, `rules_training_snapshot.json`에 없으므로 `training_signal:false`로 표시되고 `danger_count`/`caution_count`·모델 입력에는 전혀 반영되지 않습니다("Separate safety signal; not added to drug_conflict"). 이렇게 해야 `test_features_match_original_training_audit`(실제 배포 서비스가 학습 시점과 동일한 위험/주의 카운트를 내는지 검증) 같은 테스트가 계속 유효합니다.
+
 라벨: danger_count>0 OR 매칭약물>=10 OR 중증약물반응>=1 OR caution_count>=3.
 
 원본은 train/validation 80/20 층화 분할과 양성 오버샘플링을 사용합니다. 5-fold 코드도 포함하지만 fold validation F1으로 checkpoint를 선택하므로 독립 최종 test set과 동일하지 않습니다. 학습 데이터와 특성에 의해 라벨이 결정되는 구조라 높은 F1은 정의된 규칙의 재현 성능입니다. 학습 README의 100%는 임상 정확도가 아닙니다. 이번 작업에서 5-fold 재학습을 수행하지 않았습니다.
