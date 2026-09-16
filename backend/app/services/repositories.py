@@ -162,13 +162,51 @@ class ClinicalNoteRepository:
         return updated
 
 
+def _normalized_display(name: str) -> str:
+    return ' '.join(name.strip().lower().split())
+
+
+def _diagnosis_key(*, code, code_system, display_name):
+    """Priority: code_system+code identifies a diagnosis when a code is given (a code is a code
+    regardless of how the display text is phrased); only when the diagnosis has NO code do we fall
+    back to the normalized display name. A coded diagnosis is never matched against an uncoded one
+    by display text alone -- that would risk false-positive dedup between a generic free-text entry
+    and an unrelated but similarly-worded coded diagnosis."""
+    if code:
+        return ('code', code_system, code)
+    return ('name', _normalized_display(display_name))
+
+
 class DiagnosisRepository:
     def __init__(self, adapter):
         self.adapter = adapter
 
+    def _find_active_duplicate(self, p, *, code, code_system, display_name) -> Diagnosis | None:
+        key = _diagnosis_key(code=code, code_system=code_system, display_name=display_name)
+        for dx in p.problem_list:
+            # Only ACTIVE diagnoses are deduped against -- a diagnosis resolved in the past and
+            # newly reactivated is a genuinely new clinical event, not a network retry, and must be
+            # allowed through (e.g. resolved 2025 AFib episode + a new active 2026 episode).
+            if dx.status == 'active' and _diagnosis_key(code=dx.code, code_system=dx.code_system, display_name=dx.display_name) == key:
+                return dx
+        return None
+
+    def find_active_duplicate(self, patient_id, *, code, code_system, display_name) -> Diagnosis | None:
+        """Public read-only check for callers (main.py) that need to know BEFORE calling create()
+        whether this would be a dedup no-op -- e.g. to skip logging a duplicate audit event for a
+        network retry without duplicating the matching logic above."""
+        return self._find_active_duplicate(self.adapter.mutate(patient_id), code=code, code_system=code_system, display_name=display_name)
+
     def create(self, patient_id, encounter_id, *, display_name, diagnosis_type='secondary', code='',
                code_system='text', clinician='') -> Diagnosis:
         p = self.adapter.mutate(patient_id)
+        existing = self._find_active_duplicate(p, code=code, code_system=code_system, display_name=display_name)
+        if existing is not None:
+            # Idempotent, same style as ClinicalNoteRepository.sign()/MedicationOrderRepository.confirm():
+            # a retried create for an already-active diagnosis returns the existing record rather
+            # than minting a duplicate problem_list entry (which would also duplicate the
+            # patient.conditions dual-write and the Timeline entry derived from problem_list).
+            return existing
         diag = Diagnosis(id=_new_id('DX'), patient_id=patient_id, encounter_id=encounter_id,
                           code=code, code_system=code_system, display_name=display_name,
                           diagnosis_type=diagnosis_type, status='active', diagnosed_at=_now(), clinician=clinician)

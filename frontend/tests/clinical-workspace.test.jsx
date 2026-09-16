@@ -1,6 +1,6 @@
 import React from 'react';
 import {afterEach,expect,test} from 'vitest';
-import {render,screen,cleanup,waitFor,within} from '@testing-library/react';
+import {render,screen,cleanup,waitFor,within,fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../src/App.jsx';
 afterEach(cleanup);
@@ -123,6 +123,66 @@ test('Results shows the existing legacy INR history via the unified endpoint',as
  const inrGroup=(await screen.findByText('INR',{selector:'b'})).closest('.result-group');
  await within(inrGroup).findByText(/2\.1/);
  await within(inrGroup).findByText(/3\.8/);
+});
+
+// Item 6: a Clinical Summary sentence's "관련 기록 보기" (jump to source) must actually land on
+// and highlight the matching Timeline entry -- this used to silently find nothing for a
+// medication sentence, because its source id carried the internal 'order:RX-<id>' dual-write
+// marker instead of the bare id Timeline indexes by.
+test('Clinical Summary "관련 기록 보기" for a medication sentence highlights the matching Timeline entry',async()=>{
+ const user=userEvent.setup();render(<App/>);
+ await screen.findByRole('heading',{name:'박도윤 72세 / 남성'});
+ await user.click(screen.getByRole('tab',{name:'Orders'}));
+ await screen.findByText('Medication Order');
+ await user.type(screen.getByLabelText('Medication'),'리시노프릴');
+ await user.click(await screen.findByRole('option',{name:/리시노프릴/}));
+ await user.type(screen.getByLabelText('Dose'),'10');
+ await user.click(screen.getByRole('button',{name:'SynexAgent 사전 분석 실행'}));
+ await waitFor(()=>expect(screen.queryByText(/새로운 SynexAgent 신호가 감지/)||screen.queryByText('처방 제출')).toBeTruthy());
+ const submit=screen.queryByRole('button',{name:'경고 확인 후 처방 제출'})||screen.getByRole('button',{name:'처방 제출'});
+ if(submit.textContent.includes('경고'))await user.type(screen.getByLabelText(/Override 사유/),'DOM 테스트 요약 연결 확인용');
+ await user.click(submit);
+ await screen.findByText('처방이 저장되었습니다.');
+
+ await user.click(screen.getByRole('tab',{name:'분석 요약'}));
+ await screen.findByText('SynexAgent Clinical Summary');
+ const medSentence=(await screen.findByText(/현재 활성 처방을 유지 중입니다/)).closest('li');
+ await user.click(within(medSentence).getByRole('button',{name:/관련 기록 보기/}));
+
+ await screen.findByText('Patient Timeline');
+ await waitFor(()=>{
+  const highlighted=document.querySelector('.timeline-item.highlighted');
+  expect(highlighted).toBeTruthy();
+  expect(highlighted.className).toContain('type-medication');
+ });
+});
+
+// Item 1/10: a rapid double-submit (or a network retry) of the same Medication Order must not
+// create two orders -- the UI's disabled={confirmBusy} is a UX nicety, the real safeguard is the
+// server-side Idempotency-Key header (see OrdersPanel.jsx/backend main.py). fireEvent.click twice
+// back-to-back (not awaited in between, unlike userEvent.click) simulates firing before React has
+// re-rendered the disabled state.
+test('rapid double-submit of a Medication Order creates only one order (server-side idempotency)',async()=>{
+ // Uses furosemide -- a drug no other test in this file orders for SYN-002 -- so the assertion
+ // below can't be confused by a legitimate single order some other test already placed on this
+ // same shared demo patient (all tests in this file share one backend process/patient state).
+ const user=userEvent.setup();render(<App/>);
+ await screen.findByRole('heading',{name:'박도윤 72세 / 남성'});
+ await user.click(screen.getByRole('tab',{name:'Orders'}));
+ await screen.findByText('Medication Order');
+ await user.type(screen.getByLabelText('Medication'),'푸로세미드');
+ await user.click(await screen.findByRole('option',{name:/푸로세미드/}));
+ await user.type(screen.getByLabelText('Dose'),'20');
+ await user.click(screen.getByRole('button',{name:'SynexAgent 사전 분석 실행'}));
+ await waitFor(()=>expect(screen.queryByRole('button',{name:'경고 확인 후 처방 제출'})||screen.queryByRole('button',{name:'처방 제출'})).toBeTruthy());
+ const submit=screen.queryByRole('button',{name:'경고 확인 후 처방 제출'})||screen.getByRole('button',{name:'처방 제출'});
+ if(/경고/.test(submit.textContent))await user.type(screen.getByLabelText(/Override 사유/),'DOM 테스트 중복 제출 방지 확인');
+ fireEvent.click(submit);
+ fireEvent.click(submit);
+ await screen.findByText('처방이 저장되었습니다.');
+ await user.click(screen.getByRole('tab',{name:'Medication'}));
+ await screen.findByText('Medication Orders');
+ await waitFor(()=>expect(screen.getAllByText(/furosemide/i).length).toBe(1));
 });
 
 // Item 4/20: a write action refused by the backend (403, the shape a clinician_readonly caller

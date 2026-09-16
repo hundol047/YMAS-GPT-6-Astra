@@ -16,8 +16,10 @@ export default function TimelinePanel({patient,disabled,highlightIds}){
   return()=>controller.abort();
  },[patient?.id,disabled]);
  // Jump-to-source from the Clinical Summary card (item 7): scroll the matching event into view
- // once the highlighted set changes and the timeline has data to scroll to.
- useEffect(()=>{if(highlightIds?.size)highlightedRef.current?.scrollIntoView({block:'center',behavior:'smooth'})},[highlightIds,events]);
+ // once the highlighted set changes and the timeline has data to scroll to. jsdom (used by the
+ // vitest/testing-library suite) has no scrollIntoView implementation, so this is guarded rather
+ // than assumed to exist -- a real browser always has it.
+ useEffect(()=>{if(highlightIds?.size)highlightedRef.current?.scrollIntoView?.({block:'center',behavior:'smooth'})},[highlightIds,events]);
  if(disabled)return <p className="muted">직접 입력한 환자는 Timeline을 제공하지 않습니다.</p>;
  const visible=filter==='all'?events:events.filter(e=>e.type===filter);
  let scrolledOnce=false;

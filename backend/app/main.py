@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from .schemas import (RiskFeatures, PatientRequest, SimulationRequest, ReviewRequest, FeedbackRequest, Medication, Patient,
                        EncounterCreateRequest, EncounterUpdateRequest, VitalsCreateRequest, NoteCreateRequest,
@@ -11,7 +11,7 @@ from .schemas import (RiskFeatures, PatientRequest, SimulationRequest, ReviewReq
                        LabOrderCreateRequest, LabResultCreateRequest)
 from .services.risk_inference import RiskEngine
 from .services.rule_engine import CATALOG, DRUGS
-from .services.emr_adapter import DemoAdapter, FHIRAdapter, SmartOAuthClient, SmartSessionTokenProvider
+from .services.emr_adapter import DemoAdapter, FHIRAdapter, SmartOAuthClient, SmartSessionTokenProvider, SmartAuthRequired
 from .services.clinical_agent import ClinicalAgent
 from .services.audit import AuditStore
 from .services.terminology_mapper import patient_terminology
@@ -19,7 +19,7 @@ from .services.data_quality import assess as assess_data_quality
 from .services.cds_hooks import SERVICES_DOC, build_cards
 from .services.smart_launch import (build_authorize_redirect, exchange_code, create_session, SESSIONS,
                                      SESSION_TTL_SECONDS, CURRENT_SESSION_ID)
-from .services.auth import get_current_user, require, require_all, User
+from .services.auth import get_current_user, require, require_all, User, verify_oidc_token, create_auth_session, AUTH_SESSION_TTL_SECONDS
 from .services.validation import alert_type_breakdown, alert_fatigue_metrics
 from .services.imaging_pipeline import health as imaging_health
 from .services.rule_engine import RULE_METADATA
@@ -30,8 +30,10 @@ from .services.clinical_summary import build_summary
 from .services.results import unified_results
 from .services.vitals import assess as assess_vitals
 from .services.demo_seed import seed_demo_clinical_data
-from fastapi import Depends, Cookie
+from .services.idempotency import IdempotencyStore
+from fastapi import Depends, Cookie, Header
 from fastapi.responses import RedirectResponse
+import hashlib
 
 log=logging.getLogger('synexagent')
 
@@ -47,12 +49,16 @@ def build_adapter():
       - FHIR_AUTH_MODE=smart: each request instead uses the per-clinician access token SMART App
         Launch stored in the browser's session (see smart_session_context middleware below and
         emr_adapter.SmartSessionTokenProvider) -- the real SMART Launch -> session -> FHIR request
-        chain, not the shared client_credentials token.
+        chain, not the shared client_credentials token. Fail-closed: no valid session/token, or a
+        session whose issuer doesn't match FHIR_BASE_URL (or SYNEX_SMART_TRUSTED_ISSUER, if set),
+        means the FHIR request is refused (401) rather than ever sent unauthenticated.
     """
     mode=os.getenv('EMR_MODE','demo').lower()
     if mode=='fhir':
         if os.getenv('FHIR_AUTH_MODE','client_credentials').lower()=='smart':
-            return FHIRAdapter(token_provider=SmartSessionTokenProvider())
+            base_url=os.environ['FHIR_BASE_URL']
+            trusted_issuer=os.getenv('SYNEX_SMART_TRUSTED_ISSUER') or base_url
+            return FHIRAdapter(base_url=base_url,token_provider=SmartSessionTokenProvider(trusted_issuer=trusted_issuer))
         client_id=os.getenv('FHIR_CLIENT_ID')
         oauth=SmartOAuthClient(os.environ['FHIR_BASE_URL'], client_id, os.getenv('FHIR_CLIENT_SECRET',''),
                                 os.getenv('FHIR_SCOPE','system/*.read')) if client_id else None
@@ -73,6 +79,7 @@ async def lifespan(app):
     app.state.diagnosis_repo=DiagnosisRepository(app.state.adapter)
     app.state.medication_order_repo=MedicationOrderRepository(app.state.adapter)
     app.state.lab_order_repo=LabOrderRepository(app.state.adapter)
+    app.state.idempotency=IdempotencyStore()
     if isinstance(app.state.adapter,DemoAdapter):
         # Seed each bundled demo patient with one past Encounter+Vitals+Diagnosis+signed Note --
         # see services/demo_seed.py. Runs through the same repository methods a real API call
@@ -117,7 +124,16 @@ def resolve_cors_config(cors_origins_env=None, allow_credentials_env=None):
 app=FastAPI(title='SynexAgent Demo API',version='1.0.0',lifespan=lifespan)
 _cors_origins,_cors_allow_credentials=resolve_cors_config()
 app.add_middleware(CORSMiddleware,allow_origins=_cors_origins,allow_credentials=_cors_allow_credentials,
-                    allow_methods=['GET','POST','PATCH','DELETE','OPTIONS'],allow_headers=['Content-Type','Authorization'])
+                    allow_methods=['GET','POST','PATCH','DELETE','OPTIONS'],
+                    allow_headers=['Content-Type','Authorization','Idempotency-Key'])
+
+@app.exception_handler(SmartAuthRequired)
+async def smart_auth_required_handler(request,exc):
+    # FHIR_AUTH_MODE=smart is fail-closed (see emr_adapter.SmartSessionTokenProvider): no valid
+    # session/token/issuer match means the FHIR request was never sent, not sent unauthenticated.
+    # This is the one place that becomes an HTTP response -- str(exc) never contains the token
+    # itself (SmartAuthRequired is only ever raised before a token is available to include).
+    return JSONResponse(status_code=401,content={'detail':str(exc)})
 
 @app.middleware('http')
 async def smart_session_context_middleware(request,call_next):
@@ -268,6 +284,33 @@ def feedback(req:FeedbackRequest,user:User=Depends(require('feedback:submit'))):
 @app.get('/whoami')
 def whoami(user:User=Depends(get_current_user)):return {'user_id':user.id,'role':user.role}
 
+@app.post('/auth/session')
+def create_auth_session_endpoint(authorization:str|None=Header(default=None)):
+    # Exchanges an already-obtained OIDC bearer token for a server-side session + HttpOnly cookie,
+    # so the React SPA never has to hold or resend a raw token itself -- see auth.py's
+    # get_current_user() docstring for the full picture (and why this is a SEPARATE cookie/session
+    # from SMART's synex_session, which carries patient context + a FHIR token, not clinician
+    # identity). This endpoint verifies the token exactly like the existing Authorization: Bearer
+    # path already does; it does not implement the OIDC redirect flow that obtains that token in
+    # the first place (unverified against a real IdP from this environment, same caveat as the
+    # rest of AUTH_MODE=oidc -- see auth.py's module docstring).
+    if os.getenv('AUTH_MODE','demo').lower()!='oidc':
+        raise HTTPException(400,'POST /auth/session only applies when AUTH_MODE=oidc')
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(401,'Missing bearer token')
+    issuer,audience=os.environ['OIDC_ISSUER'],os.environ['OIDC_AUDIENCE']
+    try:
+        user=verify_oidc_token(authorization.split(' ',1)[1],issuer,audience)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(401,f'Invalid token: {e}')
+    session_id=create_auth_session(user_id=user.id,role=user.role)
+    secure=os.getenv('SYNEX_COOKIE_SECURE','true').lower()!='false'
+    response=JSONResponse({'user_id':user.id,'role':user.role})
+    response.set_cookie('synex_auth_session',session_id,httponly=True,secure=secure,samesite='lax',max_age=AUTH_SESSION_TTL_SECONDS)
+    return response
+
 @app.get('/validation/alert-breakdown')
 def validation_alert_breakdown():
     try:cohort=app.state.adapter.list()
@@ -332,9 +375,13 @@ def problem_list(pid:str,user:User=Depends(require('patient:read'))):return pati
 @app.post('/encounters/{eid}/diagnoses')
 def create_diagnosis(eid:str,req:DiagnosisCreateRequest,user:User=Depends(require('patient:write'))):
     pid,_=call(app.state.encounter_repo.get_by_id,eid)
+    # Checked before create() so a deduped retry (see DiagnosisRepository._find_active_duplicate)
+    # doesn't also log a redundant 'diagnosis_added' audit event for the same existing diagnosis.
+    is_retry=app.state.diagnosis_repo.find_active_duplicate(pid,code=req.code,code_system=req.code_system,display_name=req.display_name) is not None
     dx=call(app.state.diagnosis_repo.create,pid,eid,display_name=req.display_name,diagnosis_type=req.diagnosis_type,
              code=req.code,code_system=req.code_system,clinician=req.clinician)
-    app.state.audit.record(pid,'diagnosis_added',{'encounter_id':eid,'diagnosis_id':dx.id,'display_name':dx.display_name},user_id=user.id,role=user.role)
+    if not is_retry:
+        app.state.audit.record(pid,'diagnosis_added',{'encounter_id':eid,'diagnosis_id':dx.id,'display_name':dx.display_name},user_id=user.id,role=user.role)
     return dx
 
 @app.get('/encounters/{eid}/notes')
@@ -406,13 +453,37 @@ def medication_order_precheck(eid:str,req:MedicationOrderCreateRequest,user:User
     return {'patient_id':pid,'encounter_id':eid,'drug':DRUGS[req.medication_code],'before':before,'after':after,
             'delta_percentage_points':delta,'new_alerts':new_alerts,'requires_override':bool(new_alerts)}
 
+def _idempotency_scope_key(user,pid,eid,endpoint,idempotency_key):
+    return (user.id,pid,eid,endpoint,idempotency_key)
+
+def _idempotency_request_hash(req):
+    return hashlib.sha256(req.model_dump_json(exclude_none=False).encode()).hexdigest()
+
 @app.post('/encounters/{eid}/medication-orders')
-def create_medication_order(eid:str,req:MedicationOrderCreateRequest,user:User=Depends(require('order:write'))):
+def create_medication_order(eid:str,req:MedicationOrderCreateRequest,user:User=Depends(require('order:write')),
+                             idempotency_key:str|None=Header(default=None,alias='Idempotency-Key')):
     # SynexAgent never blocks a prescription automatically: a warning-producing order still goes
     # through as long as the clinician supplies a non-blank override_reason, which is recorded to
     # audit as 'warning_overridden'. The precheck is re-run here server-side (not trusted from the
     # client) so a client that skips /precheck can't bypass the override requirement.
+    #
+    # HTTP-level idempotency (Idempotency-Key header): repositories.py's confirm(order_id) already
+    # protects against a retried request for a KNOWN order id, but a network retry of THIS create
+    # call has no id yet -- each attempt would otherwise mint its own new RX-<id> and double-append
+    # to patient.medications. Scoped by user+patient+encounter+endpoint+key (see
+    # services/idempotency.py) so two different clinicians -- or the same clinician on two
+    # different orders -- never collide on the same key. A replay with the SAME key but a
+    # DIFFERENT payload is rejected (409) rather than silently returning stale data.
     pid,_=call(app.state.encounter_repo.get_by_id,eid)
+    scope_key=_idempotency_scope_key(user,pid,eid,'POST /encounters/{eid}/medication-orders',idempotency_key) if idempotency_key else None
+    request_hash=_idempotency_request_hash(req) if idempotency_key else None
+    if scope_key:
+        existing=app.state.idempotency.get(scope_key)
+        if existing:
+            if existing.request_hash!=request_hash:
+                raise HTTPException(409,'Idempotency-Key was already used with a different request payload')
+            return existing.response_body
+
     p=patient(pid)
     if req.medication_code not in DRUGS:raise HTTPException(422,'Unknown drug: select a catalog entry')
     _,_,new_alerts,_=_agent_diff(p,req.medication_code)
@@ -428,6 +499,8 @@ def create_medication_order(eid:str,req:MedicationOrderCreateRequest,user:User=D
     if new_alerts:
         app.state.audit.record(pid,'warning_overridden',{'encounter_id':eid,'order_id':order.id,'override_reason':order.override_reason,
             'alert_ids':[a['id'] for a in new_alerts]},user_id=user.id,role=user.role)
+    if scope_key:
+        app.state.idempotency.put(scope_key,request_hash=request_hash,response_body=order.model_dump(mode='json'))
     return order
 
 @app.get('/patients/{pid}/medication-orders')

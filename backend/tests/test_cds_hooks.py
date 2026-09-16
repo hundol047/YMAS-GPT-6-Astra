@@ -100,6 +100,33 @@ def test_session_context_with_no_cookie_returns_no_patient(client):
     assert r.status_code == 200
     assert r.json() == {'patient_id': None}
 
+def test_smart_mode_get_patient_401_without_a_session(monkeypatch):
+    # Item 5's fail-closed requirement, exercised through the real app: FHIR_AUTH_MODE=smart with
+    # no synex_session cookie must refuse the FHIR request (401), never send it unauthenticated.
+    from app.main import app
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv('EMR_MODE', 'fhir')
+    monkeypatch.setenv('FHIR_AUTH_MODE', 'smart')
+    monkeypatch.setenv('FHIR_BASE_URL', 'https://fake-fhir.example/r4')
+    monkeypatch.delenv('FHIR_CLIENT_ID', raising=False)
+    with TestClient(app) as c:
+        r = c.get('/patients/SYN-002')
+        assert r.status_code == 401
+
+def test_smart_mode_get_patient_401_with_wrong_issuer_session(monkeypatch):
+    from app.main import app
+    from fastapi.testclient import TestClient
+    from app.services.smart_launch import create_session
+    monkeypatch.setenv('EMR_MODE', 'fhir')
+    monkeypatch.setenv('FHIR_AUTH_MODE', 'smart')
+    monkeypatch.setenv('FHIR_BASE_URL', 'https://fake-fhir.example/r4')
+    monkeypatch.delenv('FHIR_CLIENT_ID', raising=False)
+    session_id = create_session(patient_id='SYN-002', iss='https://a-different-hospital.example/fhir',
+                                 access_token='token-for-a-different-hospital')
+    with TestClient(app) as c:
+        r = c.get('/patients/SYN-002', cookies={'synex_session': session_id})
+        assert r.status_code == 401
+
 def test_launch_state_survives_a_process_restart(tmp_path):
     # Regression test for the bug this replaced: launch state used to live in a plain in-memory
     # dict, so any worker restart between /smart/launch and /smart/callback silently dropped every

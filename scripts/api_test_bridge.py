@@ -10,7 +10,8 @@ with tempfile.TemporaryDirectory(prefix='synex-dom-') as temp:
         for line in sys.stdin:
             req=json.loads(line)
             try:
-                r=client.request(req['method'],req['path'],content=req.get('body'),headers={'Content-Type':'application/json'})
+                headers={'Content-Type':'application/json',**{k:v for k,v in (req.get('headers') or {}).items() if v is not None}}
+                r=client.request(req['method'],req['path'],content=req.get('body'),headers=headers)
                 out={'id':req['id'],'status':r.status_code,'body':r.text}
             except Exception as error:
                 out={'id':req['id'],'status':500,'body':json.dumps({'detail':str(error)})}

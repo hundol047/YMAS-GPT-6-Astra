@@ -16,6 +16,13 @@ export default function OrdersPanel({catalog,encounters,onStartEncounter,onOrder
  const [precheck,setPrecheck]=useState(null),[precheckBusy,setPrecheckBusy]=useState(false);
  const [overrideReason,setOverrideReason]=useState('');
  const [confirmBusy,setConfirmBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ // One Idempotency-Key per distinct order attempt (regenerated on each new precheck, i.e. each
+ // new order the clinician is composing) -- reused across confirmOrder() retries of THAT same
+ // attempt (a network retry, or the button firing twice before disabled={confirmBusy} takes
+ // effect) so the server-side idempotency store (see POST /encounters/{eid}/medication-orders)
+ // returns the already-created order instead of minting a duplicate. The UI-level disabled state
+ // below is a UX nicety, not the actual safeguard -- this header is.
+ const [idempotencyKey,setIdempotencyKey]=useState('');
 
  const [labName,setLabName]=useState(''),[priority,setPriority]=useState('routine'),[labIndication,setLabIndication]=useState('');
  const [labBusy,setLabBusy]=useState(false);
@@ -24,16 +31,17 @@ export default function OrdersPanel({catalog,encounters,onStartEncounter,onOrder
 
  async function runPrecheck(e){
   e.preventDefault();if(!drug||!dose||!activeId)return;setPrecheckBusy(true);setError('');setPrecheck(null);setNotice('');
+  setIdempotencyKey(crypto.randomUUID());
   try{setPrecheck(await api(`/encounters/${activeId}/medication-orders/precheck`,orderBody()))}
   catch(err){setError(err.message)}finally{setPrecheckBusy(false)}
  }
  async function confirmOrder(){
-  if(!activeId)return;setConfirmBusy(true);setError('');
+  if(!activeId||confirmBusy)return;setConfirmBusy(true);setError('');
   try{
    const body={...orderBody()};
    if(precheck?.requires_override)body.override_reason=overrideReason;
-   await api(`/encounters/${activeId}/medication-orders`,body);
-   setNotice('처방이 저장되었습니다.');setPrecheck(null);setDrug('');setDose('');setOverrideReason('');setDuration('');setIndication('');
+   await api(`/encounters/${activeId}/medication-orders`,body,undefined,undefined,{'Idempotency-Key':idempotencyKey});
+   setNotice('처방이 저장되었습니다.');setPrecheck(null);setDrug('');setDose('');setOverrideReason('');setDuration('');setIndication('');setIdempotencyKey('');
    onOrdersChanged?.();
   }catch(err){setError(err.message)}finally{setConfirmBusy(false)}
  }

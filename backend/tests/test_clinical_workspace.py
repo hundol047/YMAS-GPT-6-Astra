@@ -145,6 +145,87 @@ def test_diagnosis_dual_writes_into_flat_conditions(client):
     assert any(d['display_name'] == '고지혈증' for d in p['problem_list'])
 
 
+def test_diagnosis_retry_with_same_code_does_not_duplicate_active_problem(client):
+    # Item 2: a network retry of the same POST (same ICD code, still active) must return the
+    # existing diagnosis, not mint a second active problem_list entry / conditions dual-write /
+    # Timeline entry. Uses a code the demo seed data doesn't already have (SYN-002 is seeded with
+    # I48.91/AFib -- see demo_seed.py) so this exercises the retry path, not an incidental
+    # collision with seed data.
+    enc = _create_encounter(client)
+    body = {'display_name': 'Hyperlipidemia', 'diagnosis_type': 'secondary', 'code': 'E78.5', 'code_system': 'ICD-10'}
+    first = client.post(f"/encounters/{enc['id']}/diagnoses", json=body)
+    second = client.post(f"/encounters/{enc['id']}/diagnoses", json=body)
+    assert first.status_code == 200 and second.status_code == 200
+    assert first.json()['id'] == second.json()['id']
+    problems = client.get('/patients/SYN-002/problem-list').json()
+    matching = [d for d in problems if d['code'] == 'E78.5' and d['status'] == 'active']
+    assert len(matching) == 1
+    p = client.get('/patients/SYN-002').json()
+    assert p['conditions'].count('Hyperlipidemia') == 1
+    events = client.get('/audit/SYN-002').json()
+    assert sum(1 for e in events if e['event'] == 'diagnosis_added' and e['detail'].get('diagnosis_id') == first.json()['id']) == 1
+
+def test_diagnosis_retry_without_code_dedupes_by_normalized_display_name(client):
+    enc = _create_encounter(client)
+    r1 = client.post(f"/encounters/{enc['id']}/diagnoses", json={'display_name': '  Hyperlipidemia  '})
+    r2 = client.post(f"/encounters/{enc['id']}/diagnoses", json={'display_name': 'hyperlipidemia'})
+    assert r1.json()['id'] == r2.json()['id']
+
+def test_diagnosis_resolved_then_new_active_episode_is_allowed(client):
+    # A diagnosis resolved in the past and now newly active again (e.g. a 2025 episode that
+    # resolved, then a genuinely new 2026 episode) must NOT be blocked as a duplicate -- dedup only
+    # applies among ACTIVE diagnoses.
+    import app.main as main_module
+    enc = _create_encounter(client)
+    body = {'display_name': 'Atrial fibrillation', 'diagnosis_type': 'primary', 'code': 'I48.91', 'code_system': 'ICD-10'}
+    first = client.post(f"/encounters/{enc['id']}/diagnoses", json=body).json()
+    # Simulate the first episode resolving (no PATCH endpoint exists for this -- go directly
+    # through the same live Patient object the app itself mutates).
+    p = main_module.app.state.adapter.mutate('SYN-002')
+    for i, d in enumerate(p.problem_list):
+        if d.id == first['id']:
+            p.problem_list[i] = d.model_copy(update={'status': 'resolved'})
+    second = client.post(f"/encounters/{enc['id']}/diagnoses", json=body)
+    assert second.status_code == 200
+    assert second.json()['id'] != first['id']
+    problems = client.get('/patients/SYN-002/problem-list').json()
+    assert sum(1 for d in problems if d['code'] == 'I48.91') == 2
+    assert sum(1 for d in problems if d['code'] == 'I48.91' and d['status'] == 'active') == 1
+
+
+def test_medication_order_idempotency_key_same_payload_returns_same_order(client):
+    # Item 1: a network retry of the SAME create request with the SAME Idempotency-Key must
+    # return the SAME order, never mint a second RX and never double-append to patient.medications.
+    enc = _create_encounter(client)
+    body = {'medication_code': 'lisinopril', 'dose': 10, 'dose_unit': 'mg', 'route': 'PO'}
+    headers = {'Idempotency-Key': 'idem-key-abc-123'}
+    before = len(client.get('/patients/SYN-002').json()['medications'])
+    first = client.post(f"/encounters/{enc['id']}/medication-orders", json=body, headers=headers)
+    second = client.post(f"/encounters/{enc['id']}/medication-orders", json=body, headers=headers)
+    assert first.status_code == 200 and second.status_code == 200
+    assert first.json()['id'] == second.json()['id']
+    after = len(client.get('/patients/SYN-002').json()['medications'])
+    assert after == before + 1
+
+def test_medication_order_idempotency_key_reused_with_different_payload_is_409(client):
+    enc = _create_encounter(client)
+    headers = {'Idempotency-Key': 'idem-key-reused'}
+    r1 = client.post(f"/encounters/{enc['id']}/medication-orders", headers=headers,
+                      json={'medication_code': 'lisinopril', 'dose': 10, 'dose_unit': 'mg', 'route': 'PO'})
+    assert r1.status_code == 200
+    r2 = client.post(f"/encounters/{enc['id']}/medication-orders", headers=headers,
+                      json={'medication_code': 'lisinopril', 'dose': 20, 'dose_unit': 'mg', 'route': 'PO'})
+    assert r2.status_code == 409
+
+def test_medication_order_without_idempotency_key_still_works_unchanged(client):
+    # The header is optional -- a client that doesn't send it gets the pre-existing behavior
+    # (each request is its own create, guarded only by repository-level id-scoped idempotency).
+    enc = _create_encounter(client)
+    body = {'medication_code': 'lisinopril', 'dose': 10, 'dose_unit': 'mg', 'route': 'PO'}
+    r = client.post(f"/encounters/{enc['id']}/medication-orders", json=body)
+    assert r.status_code == 200 and r.json()['status'] == 'confirmed'
+
+
 def test_medication_order_precheck_detects_existing_interaction(client):
     enc = _create_encounter(client)
     # SYN-002 already actively takes warfarin+aspirin; ordering warfarin again should surface the
@@ -275,6 +356,29 @@ def test_clinical_summary_is_deterministic_and_cites_sources(client):
     assert inr_sentence is not None
     assert inr_sentence['source_events']  # every sentence must trace to real events
     assert '2.1' in inr_sentence['text'] and '2.6' in inr_sentence['text'] and '3.8' in inr_sentence['text']
+
+
+def test_clinical_summary_medication_source_id_matches_timeline_source_id(client):
+    # Item 6 regression: the medication sentence's source_events used to carry the RAW
+    # Medication.note dual-write marker string ('order:RX-<id>'), while Timeline's medication
+    # events use the bare order id ('RX-<id>') as source_id -- so "관련 기록 보기" (jump to
+    # source) could never find a match for a medication sentence. Confirm they're now identical.
+    enc = _create_encounter(client)
+    order = client.post(f"/encounters/{enc['id']}/medication-orders",
+                         json={'medication_code': 'lisinopril', 'dose': 10, 'dose_unit': 'mg', 'route': 'PO'}).json()
+    assert order['status'] == 'confirmed'
+
+    summary = client.get('/patients/SYN-002/clinical-summary').json()
+    med_sentence = next(s for s in summary['sentences'] if s.get('source_type') == 'medication')
+    assert order['id'] in med_sentence['source_events']
+    assert not any(sid.startswith('order:') for sid in med_sentence['source_events']), \
+        'source_events must be bare entity ids, not the internal order:<id> dual-write marker'
+
+    timeline = client.get('/patients/SYN-002/timeline').json()['events']
+    timeline_source_ids = {e['source_id'] for e in timeline if e['type'] == 'medication'}
+    assert order['id'] in timeline_source_ids
+    # The exact id scheme now matches -- a frontend "jump to source" can find it by simple equality.
+    assert set(med_sentence['source_events']) & timeline_source_ids
 
 
 def test_fhir_mode_write_endpoints_return_501_not_crash():

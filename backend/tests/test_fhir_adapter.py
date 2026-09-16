@@ -5,7 +5,7 @@ NOT prove interoperability with any specific real EHR vendor's FHIR server."""
 import httpx
 import pytest
 from app.services.emr_adapter import (FHIRAdapter, SmartOAuthClient, ClientCredentialsTokenProvider,
-                                       SmartSessionTokenProvider)
+                                       SmartSessionTokenProvider, SmartAuthRequired)
 from app.services.smart_launch import CURRENT_SESSION_ID, create_session
 
 FHIR_PATIENT = {
@@ -197,7 +197,8 @@ def test_smart_session_token_provider_uses_the_current_requests_session_token():
     try:
         transport, seen = _auth_echo_transport()
         adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4',
-                               token_provider=SmartSessionTokenProvider(), transport=transport)
+                               token_provider=SmartSessionTokenProvider(trusted_issuer='https://fake-fhir.example/r4'),
+                               transport=transport)
         p = adapter.get('fhir-1')
         assert p is not None
         assert seen['authorization'] == 'Bearer smart-session-token-abc'
@@ -205,14 +206,73 @@ def test_smart_session_token_provider_uses_the_current_requests_session_token():
         CURRENT_SESSION_ID.reset(reset_token)
 
 
-def test_smart_session_token_provider_with_no_active_session_sends_no_authorization_header():
+def test_smart_session_token_provider_trailing_slash_is_normalized():
+    # 'https://fake-fhir.example/r4' (session iss) vs 'https://fake-fhir.example/r4/' (configured
+    # trusted issuer) must still be treated as the same server.
+    session_id = create_session(patient_id='SYN-002', iss='https://fake-fhir.example/r4',
+                                 access_token='smart-session-token-abc')
+    reset_token = CURRENT_SESSION_ID.set(session_id)
+    try:
+        transport, seen = _auth_echo_transport()
+        adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4',
+                               token_provider=SmartSessionTokenProvider(trusted_issuer='https://fake-fhir.example/r4/'),
+                               transport=transport)
+        adapter.get('fhir-1')
+        assert seen['authorization'] == 'Bearer smart-session-token-abc'
+    finally:
+        CURRENT_SESSION_ID.reset(reset_token)
+
+
+def test_smart_session_token_provider_with_no_active_session_fails_closed():
+    # FAIL-CLOSED (this round's fix): no session must never fall through to an unauthenticated
+    # FHIR request -- it must refuse to send the request at all.
     reset_token = CURRENT_SESSION_ID.set(None)
     try:
         transport, seen = _auth_echo_transport()
         adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4',
-                               token_provider=SmartSessionTokenProvider(), transport=transport)
-        adapter.get('fhir-1')
-        assert seen['authorization'] is None
+                               token_provider=SmartSessionTokenProvider(trusted_issuer='https://fake-fhir.example/r4'),
+                               transport=transport)
+        with pytest.raises(SmartAuthRequired):
+            adapter.get('fhir-1')
+        assert seen == {}, 'no request should have reached the FHIR server at all'
+    finally:
+        CURRENT_SESSION_ID.reset(reset_token)
+
+
+def test_smart_session_token_provider_issuer_mismatch_fails_closed():
+    # A session whose token was issued for a DIFFERENT FHIR server must never be forwarded to
+    # this one, even though the session itself is otherwise valid and has a real token.
+    session_id = create_session(patient_id='SYN-002', iss='https://OTHER-hospital.example/fhir',
+                                 access_token='token-for-a-different-hospital')
+    reset_token = CURRENT_SESSION_ID.set(session_id)
+    try:
+        transport, seen = _auth_echo_transport()
+        adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4',
+                               token_provider=SmartSessionTokenProvider(trusted_issuer='https://fake-fhir.example/r4'),
+                               transport=transport)
+        with pytest.raises(SmartAuthRequired):
+            adapter.get('fhir-1')
+        assert seen == {}, 'no request should have reached the FHIR server at all'
+    finally:
+        CURRENT_SESSION_ID.reset(reset_token)
+
+
+def test_smart_session_token_provider_expired_session_fails_closed(monkeypatch):
+    import time as real_time
+    from app.services import smart_launch
+    session_id = create_session(patient_id='SYN-002', iss='https://fake-fhir.example/r4',
+                                 access_token='smart-session-token-abc')
+    future = real_time.time() + smart_launch.SESSION_TTL_SECONDS + 1
+    monkeypatch.setattr(smart_launch.time, 'time', lambda: future)
+    reset_token = CURRENT_SESSION_ID.set(session_id)
+    try:
+        transport, seen = _auth_echo_transport()
+        adapter = FHIRAdapter(base_url='https://fake-fhir.example/r4',
+                               token_provider=SmartSessionTokenProvider(trusted_issuer='https://fake-fhir.example/r4'),
+                               transport=transport)
+        with pytest.raises(SmartAuthRequired):
+            adapter.get('fhir-1')
+        assert seen == {}
     finally:
         CURRENT_SESSION_ID.reset(reset_token)
 
@@ -226,6 +286,18 @@ def test_build_adapter_selects_token_provider_by_fhir_auth_mode(monkeypatch):
     monkeypatch.setenv('FHIR_AUTH_MODE', 'smart')
     smart_adapter = build_adapter()
     assert isinstance(smart_adapter.token_provider, SmartSessionTokenProvider)
+    assert smart_adapter.token_provider.trusted_issuer == 'https://fake-fhir.example/r4'
+
+
+def test_build_adapter_smart_trusted_issuer_override(monkeypatch):
+    monkeypatch.setenv('EMR_MODE', 'fhir')
+    monkeypatch.setenv('FHIR_BASE_URL', 'https://fake-fhir.example/r4')
+    monkeypatch.setenv('FHIR_AUTH_MODE', 'smart')
+    monkeypatch.setenv('SYNEX_SMART_TRUSTED_ISSUER', 'https://auth.fake-fhir.example')
+    monkeypatch.delenv('FHIR_CLIENT_ID', raising=False)
+    from app.main import build_adapter
+    smart_adapter = build_adapter()
+    assert smart_adapter.token_provider.trusted_issuer == 'https://auth.fake-fhir.example'
 
     monkeypatch.delenv('FHIR_AUTH_MODE', raising=False)
     default_adapter = build_adapter()

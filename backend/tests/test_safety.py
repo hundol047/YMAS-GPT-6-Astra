@@ -141,6 +141,15 @@ def test_cors_allows_patch_and_authorization_header(client):
     assert 'PATCH' in r.headers['access-control-allow-methods']
     assert 'authorization' in r.headers['access-control-allow-headers'].lower()
 
+def test_cors_allows_idempotency_key_header(client):
+    # Regression test: the Medication Order Idempotency-Key header (item 1) is a custom header a
+    # cross-origin browser request must preflight -- without it in allow_headers, the browser
+    # blocks the actual request entirely with a CORS error before it ever reaches the server.
+    r=client.options('/encounters/ENC-1/medication-orders',headers={'Origin':'http://localhost:5173',
+        'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'idempotency-key'})
+    assert r.headers['access-control-allow-origin']=='http://localhost:5173'
+    assert 'idempotency-key' in r.headers['access-control-allow-headers'].lower()
+
 def test_cors_allows_credentials_for_session_cookie(client):
     # The synex_session HttpOnly cookie (SMART on FHIR context, SSE auth) needs allow_credentials
     # so the browser will actually send it on a cross-origin dev request.

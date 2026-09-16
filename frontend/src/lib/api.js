@@ -1,8 +1,16 @@
 export const BASE=import.meta.env.VITE_API_BASE || (import.meta.env.DEV?'/api':'');
 
-export async function api(path,body,signal,method){
+// credentials:'include' on every call (here and in streamSSE below) is the whole auth story on
+// this side: in AUTH_MODE=oidc, POST /auth/session (backend/app/services/auth.py) exchanges an
+// already-obtained bearer token for an HttpOnly synex_auth_session cookie ONCE; every request
+// after that authenticates via that cookie automatically, the same way SMART's synex_session
+// cookie already carries patient context. This app never stores a token in localStorage,
+// sessionStorage, a URL, or React state -- there is no client-side token to store, since the
+// browser only ever holds an opaque, non-readable session cookie. AUTH_MODE=demo (the default)
+// needs none of this; every request just works, unchanged.
+export async function api(path,body,signal,method,extraHeaders){
  const m=method||(body===undefined?'GET':'POST');
- const response=await fetch(BASE+path,{method:m,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal,credentials:'include'});
+ const response=await fetch(BASE+path,{method:m,headers:{'Content-Type':'application/json',...extraHeaders},body:body===undefined?undefined:JSON.stringify(body),signal,credentials:'include'});
  if(!response.ok){let data;try{data=await response.json()}catch{}throw new Error(typeof data?.detail==='string'?data.detail:`요청 실패 (${response.status}). 서버 연결을 확인하십시오.`)}
  return response.json();
 }

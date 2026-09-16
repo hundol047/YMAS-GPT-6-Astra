@@ -222,6 +222,89 @@ def test_whoami(client):
     r = client.get('/whoami')
     assert r.json() == {'user_id': 'demo-dr', 'role': 'clinician'}
 
+def test_auth_session_endpoint_exchanges_bearer_for_cookie_and_never_leaks_token(monkeypatch):
+    # POST /auth/session: the SPA's real path (item 4) -- verifies a bearer token ONCE, same as
+    # the Authorization header path, then hands back an opaque HttpOnly cookie instead of the
+    # token itself.
+    from app.main import app
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv('AUTH_MODE', 'oidc')
+    monkeypatch.setenv('OIDC_ISSUER', ISSUER)
+    monkeypatch.setenv('OIDC_AUDIENCE', AUDIENCE)
+    key, jwk = _make_rsa_jwk()
+    now = int(time.time())
+    token = _sign(key, {'iss': ISSUER, 'aud': AUDIENCE, 'sub': 'dr-session', 'role': 'clinician',
+                         'iat': now, 'exp': now + 300})
+    import app.services.auth as auth_module
+    monkeypatch.setattr(auth_module, 'JWKSCache', lambda issuer: JWKSCache(issuer, transport=_fake_jwks_transport(jwk)))
+    with TestClient(app) as c:
+        r = c.post('/auth/session', headers={'Authorization': f'Bearer {token}'})
+        assert r.status_code == 200
+        assert r.json() == {'user_id': 'dr-session', 'role': 'clinician'}
+        assert token not in r.text
+        assert token not in str(r.headers)
+        set_cookie = r.headers.get('set-cookie', '')
+        assert 'synex_auth_session=' in set_cookie
+        assert token not in set_cookie
+        assert 'httponly' in set_cookie.lower()
+
+def test_auth_session_endpoint_rejects_missing_or_invalid_token(monkeypatch):
+    from app.main import app
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv('AUTH_MODE', 'oidc')
+    monkeypatch.setenv('OIDC_ISSUER', ISSUER)
+    monkeypatch.setenv('OIDC_AUDIENCE', AUDIENCE)
+    with TestClient(app) as c:
+        assert c.post('/auth/session').status_code == 401
+        assert c.post('/auth/session', headers={'Authorization': 'Bearer garbage'}).status_code == 401
+
+def test_auth_session_endpoint_refused_in_demo_mode(monkeypatch):
+    from app.main import app
+    from fastapi.testclient import TestClient
+    monkeypatch.delenv('AUTH_MODE', raising=False)
+    with TestClient(app) as c:
+        assert c.post('/auth/session').status_code == 400
+
+def test_session_cookie_authenticates_protected_endpoints_and_enforces_rbac(monkeypatch):
+    # The full flow item 4 describes: POST /auth/session once, then every subsequent request
+    # authenticates purely via the synex_auth_session cookie (no Authorization header at all,
+    # exactly like a browser fetch with credentials:'include') -- and RBAC is enforced exactly
+    # the same as the bearer-token path (readonly can read, cannot write).
+    from app.main import app
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv('AUTH_MODE', 'oidc')
+    monkeypatch.setenv('OIDC_ISSUER', ISSUER)
+    monkeypatch.setenv('OIDC_AUDIENCE', AUDIENCE)
+    key, jwk = _make_rsa_jwk()
+    now = int(time.time())
+    readonly_token = _sign(key, {'iss': ISSUER, 'aud': AUDIENCE, 'sub': 'ro-user', 'role': 'clinician_readonly',
+                                  'iat': now, 'exp': now + 300})
+    import app.services.auth as auth_module
+    monkeypatch.setattr(auth_module, 'JWKSCache', lambda issuer: JWKSCache(issuer, transport=_fake_jwks_transport(jwk)))
+    with TestClient(app) as c:
+        r = c.post('/auth/session', headers={'Authorization': f'Bearer {readonly_token}'})
+        assert r.status_code == 200
+        session_id = r.cookies.get('synex_auth_session')
+        cookies = {'synex_auth_session': session_id}
+        # No Authorization header from here on -- only the cookie the client now holds.
+        r = c.get('/patients/SYN-002', cookies=cookies)
+        assert r.status_code == 200
+        r = c.get('/whoami', cookies=cookies)
+        assert r.json() == {'user_id': 'ro-user', 'role': 'clinician_readonly'}
+        encounters = c.get('/patients/SYN-002/encounters', cookies=cookies).json()
+        r = c.post(f'/encounters/{encounters[0]["id"]}/notes', cookies=cookies,
+                    json={'author': 'ro', 'subjective': 'x', 'objective': 'x', 'assessment': 'x', 'plan': 'x'})
+        assert r.status_code == 403
+
+def test_no_session_and_no_bearer_token_is_401_in_oidc_mode(monkeypatch):
+    from app.main import app
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv('AUTH_MODE', 'oidc')
+    monkeypatch.setenv('OIDC_ISSUER', ISSUER)
+    monkeypatch.setenv('OIDC_AUDIENCE', AUDIENCE)
+    with TestClient(app) as c:
+        assert c.get('/patients/SYN-002').status_code == 401
+
 def test_feedback_endpoint_stores_and_does_not_train(client):
     r = client.post('/agent/analyze', json={'patient_id': 'SYN-002'})
     analysis = r.json()

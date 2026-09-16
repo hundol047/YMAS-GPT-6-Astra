@@ -22,7 +22,7 @@ State is kept in one of two backends, chosen at import time:
   multi-worker deployment still needs Redis (or a real shared DB) to keep an in-flight SMART launch
   visible to whichever worker handles the callback.
 """
-import base64, contextvars, hashlib, json, os, secrets, sqlite3
+import base64, contextvars, hashlib, json, os, secrets, sqlite3, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -160,13 +160,25 @@ class _SessionStore:
     an HTTP response, a log message, or an audit detail dict. This class is intentionally the ONLY
     place a token touches storage, so swapping it for a real secret manager / KMS-backed session
     store later (a real deployment should) means changing this one class, not call sites.
+
+    EXPIRY: a session older than SESSION_TTL_SECONDS is never returned by context() or token_for()
+    -- both check the row's age on every read (not just opportunistically on the next put(), which
+    used to mean an old session already in the table stayed readable until the next unrelated
+    write happened to sweep it). An expired row is deleted the moment it's read, not left behind
+    for the next put()'s sweep. Age is tracked as a Unix timestamp (REAL), not an ISO string, so
+    expiry is a plain numeric comparison rather than parsing/relying on SQLite's date functions.
+
+    Note for local dev: this changed the table's `created_at` TEXT column to `created_at_ts` REAL.
+    A pre-existing smart_session.sqlite3 from before this change has the old schema and won't be
+    migrated automatically (CREATE TABLE IF NOT EXISTS is a no-op against it) -- delete the file
+    (or point SYNEX_SESSION_PATH at a fresh path) rather than run against a stale schema.
     """
     def __init__(self, path=None):
         self.path = str(path or os.getenv('SYNEX_SESSION_PATH', Path(__file__).resolve().parents[2] / 'data' / 'smart_session.sqlite3'))
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.execute('CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, '
-                       'iss TEXT NOT NULL, access_token TEXT NOT NULL, created_at TEXT NOT NULL)')
+                       'iss TEXT NOT NULL, access_token TEXT NOT NULL, created_at_ts REAL NOT NULL)')
 
     def _connect(self):
         return sqlite3.connect(self.path, timeout=15)
@@ -174,18 +186,28 @@ class _SessionStore:
     def put(self, session_id, *, patient_id, iss, access_token):
         with self._connect() as db:
             db.execute('INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?)',
-                       (session_id, patient_id, iss, access_token, datetime.now(timezone.utc).isoformat()))
-            db.execute("DELETE FROM sessions WHERE created_at < datetime('now', ?)", (f'-{SESSION_TTL_SECONDS} seconds',))
+                       (session_id, patient_id, iss, access_token, time.time()))
+            db.execute('DELETE FROM sessions WHERE created_at_ts < ?', (time.time() - SESSION_TTL_SECONDS,))
+
+    def _read_if_not_expired(self, db, session_id, columns):
+        row = db.execute(f'SELECT {columns}, created_at_ts FROM sessions WHERE session_id=?', (session_id,)).fetchone()
+        if row is None:
+            return None
+        *values, created_at_ts = row
+        if time.time() - created_at_ts >= SESSION_TTL_SECONDS:
+            db.execute('DELETE FROM sessions WHERE session_id=?', (session_id,))
+            return None
+        return values
 
     def context(self, session_id):
         with self._connect() as db:
-            row = db.execute('SELECT patient_id, iss FROM sessions WHERE session_id=?', (session_id,)).fetchone()
-        return {'patient_id': row[0], 'iss': row[1]} if row else None
+            values = self._read_if_not_expired(db, session_id, 'patient_id, iss')
+        return {'patient_id': values[0], 'iss': values[1]} if values else None
 
     def token_for(self, session_id):  # internal use only -- see class docstring
         with self._connect() as db:
-            row = db.execute('SELECT access_token FROM sessions WHERE session_id=?', (session_id,)).fetchone()
-        return row[0] if row else None
+            values = self._read_if_not_expired(db, session_id, 'access_token')
+        return values[0] if values else None
 
 
 class _RedisSessionStore:

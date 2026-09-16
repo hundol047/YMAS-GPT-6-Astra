@@ -7,10 +7,18 @@ treat it as an engineering starting point, not a compliance attestation.
 ## What's implemented
 
 - **Auth**: `AUTH_MODE=oidc` verifies bearer JWTs against a real OIDC issuer's JWKS (signature,
-  issuer, audience, expiry) -- see `backend/app/services/auth.py`. Default `AUTH_MODE=demo` keeps
-  the existing fixed "DR" identity for local development/demo, matching prior behavior exactly.
+  issuer, audience, expiry) -- see `backend/app/services/auth.py`. A browser client uses a second
+  path instead of resending the raw token on every request: `POST /auth/session` verifies the
+  token once and exchanges it for an HttpOnly `synex_auth_session` cookie backed by a server-side
+  session store (`_AuthSessionStore`, TTL-enforced on every read, not just on write) -- the SPA
+  never holds the token in localStorage/sessionStorage/a URL/React state. This is a SEPARATE
+  session/cookie from SMART's `synex_session` (patient context + FHIR token) -- see
+  `docs/EMR_INTEGRATION.md`'s "AUTH_MODE=oidc" section. Default `AUTH_MODE=demo` keeps the existing
+  fixed identity for local development/demo, matching prior behavior exactly.
 - **RBAC**: role → permission table plus a `NEVER_GRANTED` set (patient edit, automatic
   prescription changes, rule edits) no role can ever pass, checked in code, not just documented.
+  `clinician_readonly` is genuinely read-only (cannot write/sign a note or place an order) -- see
+  `docs/EMR_INTEGRATION.md`'s "RBAC 역할" section for the current 4-role split.
 - **Audit**: append-only SQLite event log; every write now carries `user_id`/`role` when `AUTH_MODE=oidc`
   is set (or the demo identity otherwise). No delete/update path exists for audit rows.
 - **Secrets**: `FHIR_CLIENT_SECRET`, OIDC config, etc. are read only from environment variables at
@@ -31,7 +39,10 @@ treat it as an engineering starting point, not a compliance attestation.
 - **TLS**: this app assumes TLS termination happens in front of it (a real deployment's reverse
   proxy/ingress, not application code here). Nothing in this repo configures TLS certificates.
 - **Session expiration / token refresh UX**: `SmartOAuthClient`/`verify_oidc_token` handle token
-  acquisition and expiry checks, but there is no frontend session-expiry UX (re-login prompt, etc.).
+  acquisition and expiry checks, and both server-side session stores (`_AuthSessionStore` for
+  OIDC, `_SessionStore` for SMART) now actually expire a session on every read past their TTL
+  (not just opportunistically on the next write) -- but there is still no FRONTEND session-expiry
+  UX (a re-login prompt when a session lapses mid-use, silent token refresh, etc.).
 - **Network segmentation**: the intended shape is EMR/OCS → hospital network → Jetson AGX Orin
   (local inference) with minimal external cloud transmission -- see `docs/JETSON_DEPLOYMENT.md`.
   This repo does not configure any network policy; that's deployment-environment-specific.

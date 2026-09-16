@@ -41,6 +41,13 @@ def _lab_points(patient, lab_order_repo):
 
 
 def build_summary(patient, *, lab_order_repo, ai_warning_events, months=6) -> dict:
+    # source_events entries use the SAME id scheme as timeline.py's `source_id` for the matching
+    # `type` (lab/medication/ai_warning) -- a legacy lab uses 'lab:<name>:<date>', a lab-order
+    # result uses its LabResult/LabOrder id, a medication order uses its bare 'RX-<id>' (NOT the
+    # 'order:RX-<id>' marker string Medication.note carries -- that prefix is an internal dual-write
+    # marker, not the entity id Timeline indexes by). This is what makes the frontend's "관련 기록
+    # 보기" (jump to source) actually find and highlight the right Timeline entry instead of
+    # silently matching nothing.
     cutoff = (datetime.now(timezone.utc) - timedelta(days=months * 30)).date().isoformat()
     sentences = []
 
@@ -53,23 +60,24 @@ def build_summary(patient, *, lab_order_repo, ai_warning_events, months=6) -> di
         arrow = ' → '.join(str(v) for v in values)
         if trend == 'rising':
             sentences.append({'text': f'{name}이(가) 최근 {len(values)}회 연속 상승 추세로 감지되었습니다 ({arrow}).',
-                               'source_events': [sid for _, _, sid in recent]})
+                               'source_type': 'lab', 'source_events': [sid for _, _, sid in recent]})
         elif trend == 'falling':
             sentences.append({'text': f'{name}이(가) 최근 {len(values)}회 연속 하락 추세로 감지되었습니다 ({arrow}).',
-                               'source_events': [sid for _, _, sid in recent]})
+                               'source_type': 'lab', 'source_events': [sid for _, _, sid in recent]})
         elif trend == 'stable':
             sentences.append({'text': f'{name}은(는) 최근 측정값이 안정적입니다 ({arrow}).',
-                               'source_events': [sid for _, _, sid in recent]})
+                               'source_type': 'lab', 'source_events': [sid for _, _, sid in recent]})
 
     active = [m for m in patient.medications if m.status == 'active']
     if active:
         names = ', '.join(sorted({m.drug_id for m in active}))
-        sentences.append({'text': f'현재 활성 처방을 유지 중입니다: {names}.',
-                           'source_events': [m.note for m in active if m.note.startswith('order:')]})
+        sentences.append({'text': f'현재 활성 처방을 유지 중입니다: {names}.', 'source_type': 'medication',
+                           'source_events': [m.note.split('order:', 1)[1] for m in active if m.note.startswith('order:')]})
 
     recent_warnings = [w for w in ai_warning_events if w['type'] == 'ai_warning' and w['timestamp'] >= cutoff][:3]
     for w in recent_warnings:
-        sentences.append({'text': f'SynexAgent 신호: {w["title"]}.', 'source_events': [w.get('source_id')]})
+        sentences.append({'text': f'SynexAgent 신호: {w["title"]}.', 'source_type': 'ai_warning',
+                           'source_events': [w.get('source_id')]})
 
     return {
         'patient_id': patient.id,

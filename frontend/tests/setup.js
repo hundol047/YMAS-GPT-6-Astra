@@ -12,7 +12,10 @@ bridge.on('error',err=>{for(const p of pending.values())p.reject(err);pending.cl
 bridge.stderr.on('data',()=>{});
 bridge.on('exit',()=>{for(const p of pending.values())p.reject(new Error('API bridge exited'));pending.clear()});
 afterAll(()=>{bridge.stdin.end();bridge.kill()});
-globalThis.fetch=(url,options={})=>new Promise((resolve,reject)=>{const id=++nextId;pending.set(id,{resolve,reject});bridge.stdin.write(JSON.stringify({id,path:url.replace(/^\/api/,''),method:options.method||'GET',body:options.body})+'\n')});
+// Forwards options.headers to the bridge (beyond just method/body) so tests can exercise
+// header-driven server behavior -- e.g. the Idempotency-Key header on medication order creation --
+// through the same real backend/app.main path a browser fetch(..., {headers}) would use.
+globalThis.fetch=(url,options={})=>new Promise((resolve,reject)=>{const id=++nextId;pending.set(id,{resolve,reject});bridge.stdin.write(JSON.stringify({id,path:url.replace(/^\/api/,''),method:options.method||'GET',body:options.body,headers:options.headers})+'\n')});
 window.matchMedia=()=>({matches:true,addListener(){},removeListener(){},addEventListener(){},removeEventListener(){}});
 globalThis.ResizeObserver=class {observe(){}unobserve(){}disconnect(){}};
 // jsdom has no SSE implementation. Replay the actual FastAPI SSE response over stdio.

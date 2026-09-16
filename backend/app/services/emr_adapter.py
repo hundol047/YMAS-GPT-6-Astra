@@ -163,23 +163,58 @@ class ClientCredentialsTokenProvider(TokenProvider):
         return self.oauth.token() if self.oauth else None
 
 
+class SmartAuthRequired(Exception):
+    """Raised by SmartSessionTokenProvider (never by ClientCredentialsTokenProvider) when
+    FHIR_AUTH_MODE=smart has no valid session/token/issuer match to authenticate a FHIR request
+    with. FHIRAdapter._get() lets this propagate rather than catching it and falling back to an
+    unauthenticated request -- SMART mode is fail-closed by design (see class docstring below).
+    main.py registers a FastAPI exception handler that turns this into a 401 response."""
+
+
+def _normalize_issuer(url: str) -> str:
+    return (url or '').rstrip('/')
+
+
 class SmartSessionTokenProvider(TokenProvider):
     """FHIR_AUTH_MODE=smart: use the per-clinician access token that /smart/callback stored in
     smart_launch.SESSIONS for the CURRENT REQUEST's session, via the synex_session HttpOnly
     cookie -- never the previous client_credentials flow. main.py's smart_session_context
     middleware sets smart_launch.CURRENT_SESSION_ID for the lifetime of each request from that
-    cookie; this class only ever reads it back, and only ever asks SESSIONS.token_for() (the
-    session store's one internal-use accessor -- see its docstring on why the token never
-    otherwise leaves storage). If the request carries no SMART session (no launch happened, or it
-    expired), there is no token to use and get_token() returns None -- the resulting FHIR call
-    goes out unauthenticated, the same fallback client_credentials mode already has with no
-    oauth configured."""
+    cookie; this class only ever reads it back, and only ever asks SESSIONS.context()/token_for()
+    (the session store's own accessors -- see _SessionStore's docstring on why the token never
+    otherwise leaves storage).
+
+    FAIL-CLOSED: unlike ClientCredentialsTokenProvider (where no oauth configured legitimately
+    means "call an already-authenticated/network-restricted endpoint with no bearer token"), SMART
+    mode has no such legitimate no-token case -- a SMART launch is the whole point of this mode.
+    Missing session, expired session, missing token, or an issuer mismatch (below) all raise
+    SmartAuthRequired rather than returning None, so FHIRAdapter never silently sends the request
+    unauthenticated.
+
+    ISSUER VALIDATION: the session's `iss` (the authorization server that ISSUED this session's
+    access token, captured at /smart/callback) must match `trusted_issuer` (the FHIR server this
+    adapter actually talks to, i.e. FHIR_BASE_URL, or an explicit SYNEX_SMART_TRUSTED_ISSUER
+    override -- see build_adapter() in main.py) after trailing-slash normalization. A token issued
+    for hospital-a's FHIR server must never be forwarded to hospital-b's, even if both sessions
+    happen to be live in the same SQLite/Redis session store."""
+    def __init__(self, trusted_issuer: str):
+        self.trusted_issuer = _normalize_issuer(trusted_issuer)
+
     def get_token(self):
         from .smart_launch import CURRENT_SESSION_ID, SESSIONS
         session_id = CURRENT_SESSION_ID.get()
         if not session_id:
-            return None
-        return SESSIONS.token_for(session_id)
+            raise SmartAuthRequired('FHIR_AUTH_MODE=smart requires an active SMART session; none present on this request.')
+        ctx = SESSIONS.context(session_id)
+        if ctx is None:
+            raise SmartAuthRequired('SMART session is missing or has expired.')
+        if _normalize_issuer(ctx['iss']) != self.trusted_issuer:
+            raise SmartAuthRequired(f"SMART session issuer {ctx['iss']!r} does not match this server's configured "
+                                     f"FHIR issuer {self.trusted_issuer!r}; refusing to send its token there.")
+        token = SESSIONS.token_for(session_id)
+        if not token:
+            raise SmartAuthRequired('SMART session has no access token.')
+        return token
 
 
 class FHIRAdapter(BaseEMRAdapter):

@@ -11,6 +11,25 @@ endpoint (backend/tests/test_auth.py) -- it has NOT been exercised against a rea
 OIDC/IdP (Keycloak, Azure AD, Okta, ...); point OIDC_ISSUER/OIDC_AUDIENCE at a real one and that
 still needs its own verification pass before relying on it.
 
+get_current_user() accepts EITHER of two credentials, checked in this order:
+  1. Authorization: Bearer <token> -- verified via verify_oidc_token(), as above. This is the path
+     a non-browser client (a script, another service) uses directly.
+  2. A trusted server-side session, via the synex_auth_session HttpOnly cookie -- this is the path
+     the React SPA uses. A browser page can't (and must not) hold or resend a raw bearer token on
+     every request -- it never touches localStorage/sessionStorage/a URL/React state -- so
+     POST /auth/session (main.py) verifies a bearer token ONCE, the same way path 1 does, and
+     exchanges it for an opaque session id set as that HttpOnly cookie; every subsequent request
+     just needs fetch(..., {credentials:'include'}) to carry it automatically, exactly the same
+     "verify once, keep only an opaque session id" shape smart_launch.py's SMART session already
+     uses for FHIR access tokens (a DIFFERENT session/cookie -- that one carries patient context
+     + a FHIR token, this one carries clinician identity + role; the two are never mixed). This
+     endpoint does not implement an OIDC Authorization Code REDIRECT flow itself -- obtaining the
+     bearer token from a real hospital IdP in the first place is the same unverified-from-this-
+     environment gap noted above for path 1; POST /auth/session is the step that comes after
+     whatever flow obtained that token.
+AUTH_MODE=demo needs neither -- get_current_user() returns the fixed demo identity immediately,
+unchanged from before.
+
 RBAC roles (this is the actual per-action split; earlier this file granted every action to every
 role, which meant `clinician_readonly` could sign notes and place orders -- that was a bug, not a
 design choice, and is fixed here):
@@ -27,11 +46,12 @@ prescription changes, rule edits); there is no endpoint implementing any of them
 refuses them unconditionally so a future endpoint has to consciously bypass this check rather than
 silently skip it.
 """
-import os, time
+import json, os, secrets, sqlite3, time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 import httpx
-from fastapi import Header, HTTPException
+from fastapi import Cookie, Header, HTTPException
 
 _READ_ACTIONS = {'patient:read', 'analysis:read', 'note:read', 'order:read', 'audit:read'}
 # 'patient:write' here means clinical documentation on a patient (encounter/vitals/diagnosis
@@ -92,19 +112,93 @@ def verify_oidc_token(token: str, issuer: str, audience: str, role_claim: str = 
     return User(id=str(claims.get('sub', 'unknown')), role=role)
 
 
-def get_current_user(authorization: Optional[str] = Header(None)) -> User:
+# --- Server-side session for AUTH_MODE=oidc BROWSER clients -- see get_current_user()'s docstring
+# note above for how this differs from smart_launch.py's SMART session. Same TTL-enforced-on-every-
+# read SQLite/Redis dual-backend shape as smart_launch._SessionStore (a session past
+# AUTH_SESSION_TTL_SECONDS is never returned by get(), and the expired row is deleted on that
+# read, not left for some later unrelated write to sweep). ---------------------------------------
+AUTH_SESSION_TTL_SECONDS = 8 * 3600  # a clinical shift, same semantics as SMART_SESSION_TTL_SECONDS
+
+
+class _AuthSessionStore:
+    def __init__(self, path=None):
+        self.path = str(path or os.getenv('SYNEX_AUTH_SESSION_PATH', Path(__file__).resolve().parents[2] / 'data' / 'auth_session.sqlite3'))
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS auth_sessions (session_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, '
+                       'role TEXT NOT NULL, created_at_ts REAL NOT NULL)')
+
+    def _connect(self):
+        return sqlite3.connect(self.path, timeout=15)
+
+    def put(self, session_id, *, user_id, role):
+        with self._connect() as db:
+            db.execute('INSERT OR REPLACE INTO auth_sessions VALUES (?,?,?,?)', (session_id, user_id, role, time.time()))
+            db.execute('DELETE FROM auth_sessions WHERE created_at_ts < ?', (time.time() - AUTH_SESSION_TTL_SECONDS,))
+
+    def get(self, session_id) -> Optional['User']:
+        with self._connect() as db:
+            row = db.execute('SELECT user_id, role, created_at_ts FROM auth_sessions WHERE session_id=?', (session_id,)).fetchone()
+            if row is None:
+                return None
+            user_id, role, created_at_ts = row
+            if time.time() - created_at_ts >= AUTH_SESSION_TTL_SECONDS:
+                db.execute('DELETE FROM auth_sessions WHERE session_id=?', (session_id,))
+                return None
+        return User(id=user_id, role=role)
+
+
+class _RedisAuthSessionStore:
+    def __init__(self, url):
+        import redis
+        self._r = redis.Redis.from_url(url, decode_responses=True)
+
+    def _key(self, session_id):
+        return f'synex:auth_session:{session_id}'
+
+    def put(self, session_id, *, user_id, role):
+        self._r.set(self._key(session_id), json.dumps({'user_id': user_id, 'role': role}), ex=AUTH_SESSION_TTL_SECONDS)
+
+    def get(self, session_id) -> Optional['User']:
+        raw = self._r.get(self._key(session_id))
+        if not raw:
+            return None
+        d = json.loads(raw)
+        return User(id=d['user_id'], role=d['role'])
+
+
+def _build_auth_session_store():
+    redis_url = os.getenv('SYNEX_REDIS_URL')
+    return _RedisAuthSessionStore(redis_url) if redis_url else _AuthSessionStore()
+
+
+AUTH_SESSIONS = _build_auth_session_store()
+
+
+def create_auth_session(*, user_id, role) -> str:
+    session_id = secrets.token_urlsafe(24)
+    AUTH_SESSIONS.put(session_id, user_id=user_id, role=role)
+    return session_id
+
+
+def get_current_user(authorization: Optional[str] = Header(None),
+                      synex_auth_session: Optional[str] = Cookie(default=None)) -> User:
     mode = os.getenv('AUTH_MODE', 'demo').lower()
     if mode != 'oidc':
         return User(id=os.getenv('SYNEX_DEMO_USER_ID', 'demo-dr'), role=os.getenv('SYNEX_DEMO_ROLE', 'clinician'))
-    if not authorization or not authorization.lower().startswith('bearer '):
-        raise HTTPException(401, 'Missing bearer token')
-    issuer, audience = os.environ['OIDC_ISSUER'], os.environ['OIDC_AUDIENCE']
-    try:
-        return verify_oidc_token(authorization.split(' ', 1)[1], issuer, audience)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(401, f'Invalid token: {e}')
+    if authorization and authorization.lower().startswith('bearer '):
+        issuer, audience = os.environ['OIDC_ISSUER'], os.environ['OIDC_AUDIENCE']
+        try:
+            return verify_oidc_token(authorization.split(' ', 1)[1], issuer, audience)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(401, f'Invalid token: {e}')
+    if synex_auth_session:
+        user = AUTH_SESSIONS.get(synex_auth_session)
+        if user is not None:
+            return user
+    raise HTTPException(401, 'Missing bearer token or a valid authenticated session cookie')
 
 
 def require(action: str):
