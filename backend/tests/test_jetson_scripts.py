@@ -28,7 +28,7 @@ def test_verify_script_requesting_gpu_never_claims_verified_when_unavailable():
     assert body['onnxruntime']['status'] != 'GPU ACCELERATION VERIFIED'
 
 def test_deployment_profiles_ship_with_no_fabricated_verified_entry():
-    profiles = json.loads((ROOT / 'config' / 'jetson_agx_orin_profiles.json').read_text())
+    profiles = json.loads((ROOT / 'config' / 'jetson_agx_orin_profiles.json').read_text(encoding='utf-8'))
     assert not any(p.get('verified') for p in profiles['profiles']), \
         'no profile should be marked verified without a real run on real AGX Orin hardware'
 

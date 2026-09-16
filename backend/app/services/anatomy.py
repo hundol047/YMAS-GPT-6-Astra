@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 
-MAPPING = json.loads((Path(__file__).resolve().parents[2] / 'data/anatomy_mapping.json').read_text())
+MAPPING = json.loads((Path(__file__).resolve().parents[2] / 'data/anatomy_mapping.json').read_text(encoding='utf-8'))
 SYSTEMIC_TYPES = {'allergy', 'adverse_history', 'polypharmacy', 'duplicate_group',
                   'duplicate_ingredient', 'caution_accumulation'}
 
