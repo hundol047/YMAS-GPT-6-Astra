@@ -47,6 +47,14 @@ export const legendCopy=[
 export const DISCLAIMER='3D 강조 영역은 AI가 환자 기록과 위험 신호를 해부학적 영역에 연결한 임상 관련성 시각화이며, 실제 병변 위치 또는 영상진단 결과를 의미하지 않습니다.';
 export function targetsFor(data,group){return (group==='systemic'?data?.systemic:data?.targets?.filter(t=>t.organ_id===group))||[]}
 export function severityFor(targets){return ['danger','caution','info'].find(s=>targets.some(t=>t.severity===s))||'none'}
+// Picks the single most relevant target to headline on the 3D marker/layer row -- backend's
+// fixed rule-engine title/reason (e.g. "출혈 위험 상승 — 항응고 효과 중첩"), never a guessed or
+// AI-inferred symptom. Highest severity first, then most recently generated.
+const SEVERITY_ORDER={danger:0,caution:1,info:2};
+export function primaryTargetFor(targets){
+ if(!targets?.length)return null;
+ return [...targets].sort((a,b)=>(SEVERITY_ORDER[a.severity]??3)-(SEVERITY_ORDER[b.severity]??3))[0];
+}
 export const sliceAxes={axial:1,coronal:2,sagittal:0};
 export function sliceValue(mode,value){return mode==='axial'? .9+value*.033:value*.014}
 

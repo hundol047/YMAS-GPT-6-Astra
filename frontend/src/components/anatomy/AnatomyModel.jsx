@@ -5,7 +5,7 @@ import {makeGeometry,buildTorsoLathe} from './geometry';
 import {useAnatomyAssets} from './AnatomyAssets';
 import {useAnatomyExtras} from './AnatomyExtrasAssets';
 import {Line,Html} from '@react-three/drei';
-import {organs,colors,labels,targetsFor,severityFor,BODY_PROFILES,extrasTransform,SEX_BODY_SCALE} from '../../data/anatomyMap';
+import {organs,colors,labels,targetsFor,severityFor,primaryTargetFor,BODY_PROFILES,extrasTransform,SEX_BODY_SCALE} from '../../data/anatomyMap';
 
 // Feet/ground level in model units -- matches both the real skin mesh's measured lower bound and
 // the procedural Limb's foot position (see GROUND_PIVOT usage below).
@@ -24,6 +24,10 @@ const Organ=memo(function Organ({organ,selected,choose,severity,targets,planes,r
   const labs=(targets||[]).flatMap(t=>t.sources.filter(s=>s.type==='lab'));
   return [...labs].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).at(-1);
  },[targets]);
+ // The organ's own rule-engine reason (e.g. "출혈 위험 상승 — 항응고 효과 중첩"), not a
+ // generic severity word -- see anatomyMap.js primaryTargetFor.
+ const primaryTarget=useMemo(()=>primaryTargetFor(targets),[targets]);
+ const extraTargetCount=Math.max(0,(targets?.length||0)-1);
  return <group position={organ.p}>
  <mesh name={organ.id} scale={organ.s} geometry={geometry}
   onClick={e=>{e.stopPropagation();choose(organ.id)}}
@@ -34,8 +38,8 @@ const Organ=memo(function Organ({organ,selected,choose,severity,targets,planes,r
  </mesh>
  {(selected||hovered)&&<mesh scale={organ.s.map(v=>v*1.05)} geometry={geometry} raycast={()=>null}><meshBasicMaterial color={selected?'#a8f9ed':'#eaf6ff'} transparent opacity={selected?.2:.15} wireframe clippingPlanes={planes}/></mesh>}
  {(!selected&&severity==='caution')&&<mesh scale={organ.s.map(v=>v*1.028)} geometry={geometry} raycast={()=>null}><meshBasicMaterial color={colors.caution} transparent opacity={.17} wireframe clippingPlanes={planes}/></mesh>}
- {primaryMarker&&<><Line points={[[0,0,0],[.55,.3,.2],[.95,.3,.2]]} color={color} lineWidth={1}/><Html position={[.96,.3,.2]} style={{pointerEvents:'none'}} distanceFactor={9}><div className="an-marker"><b>{organ.en}</b><span>{organ.ko} · {labels[severity]}</span></div></Html></>}
- {!primaryMarker&&hovered&&<Html position={[0,organ.s[1]*1.2+.12,0]} style={{pointerEvents:'none'}} distanceFactor={9}><div className="an-tooltip"><b>{organ.ko}</b><small>{organ.en}</small><span>Clinical signals: {(targets||[]).length}</span>{latestLab&&<span>Latest related lab: {latestLab.name}</span>}<span>Imaging: {demoImagingOpen?'데모 참고 영상':'참고 영상 없음'}</span></div></Html>}
+ {primaryMarker&&<><Line points={[[0,0,0],[.55,.3,.2],[.95,.3,.2]]} color={color} lineWidth={1}/><Html position={[.96,.3,.2]} style={{pointerEvents:'none'}} distanceFactor={9}><div className="an-marker"><b>{organ.en}</b><span>{organ.ko} · {labels[severity]}</span>{primaryTarget&&<><em>{primaryTarget.title}</em><small>{primaryTarget.reason}</small></>}{extraTargetCount>0&&<small className="an-marker-more">+{extraTargetCount}건 더 · 상세 패널 참고</small>}</div></Html></>}
+ {!primaryMarker&&hovered&&<Html position={[0,organ.s[1]*1.2+.12,0]} style={{pointerEvents:'none'}} distanceFactor={9}><div className="an-tooltip"><b>{organ.ko}</b><small>{organ.en}</small>{primaryTarget?<><span>{primaryTarget.title}</span><small>{primaryTarget.reason}</small></>:<span>Clinical signals: {(targets||[]).length}</span>}{extraTargetCount>0&&<small className="an-marker-more">+{extraTargetCount}건 더</small>}{latestLab&&<span>Latest related lab: {latestLab.name}</span>}<span>Imaging: {demoImagingOpen?'데모 참고 영상':'참고 영상 없음'}</span></div></Html>}
  {!primaryMarker&&!hovered&&showLabels&&<Html position={[0,organ.s[1]*1.15+.08,0]} style={{pointerEvents:'none'}} distanceFactor={9}><div className="an-label">{organ.ko}</div></Html>}
  </group>;
 });
