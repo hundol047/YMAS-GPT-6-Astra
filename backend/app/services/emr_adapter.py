@@ -11,9 +11,9 @@ MedicationRequest, MedicationStatement, AllergyIntolerance, Observation) and SMA
 client_credentials OAuth2, and is unit-tested with a fake HTTP transport
 (backend/tests/test_fhir_adapter.py) rather than a live server. Treat it as
 implemented-but-unverified-against-production until it is pointed at a real FHIR sandbox and that
-run is captured somewhere. Encounter/DiagnosticReport/ImagingStudy fetch helpers are included for
-future use but are not yet folded into `_to_patient` -- this app's internal Patient schema (which
-this task deliberately does not change) has no field for them yet.
+run is captured somewhere. Encounter/DiagnosticReport/ImagingStudy are fetched via `_search` and
+mapped into Patient.encounters/diagnostic_reports/imaging_studies (simple summaries, not full FHIR
+resources -- only what those fields carry: id/date/type-or-name/status[/conclusion or modality]).
 """
 import json, os, time
 from abc import ABC, abstractmethod
@@ -21,7 +21,7 @@ from datetime import date as _date
 from pathlib import Path
 from typing import Optional
 import httpx
-from ..schemas import Patient, Medication, Allergy, Lab
+from ..schemas import Patient, Medication, Allergy, Lab, Encounter, DiagnosticReport, ImagingStudy
 from .rule_engine import DRUGS
 
 
@@ -57,6 +57,16 @@ class DemoAdapter(BaseEMRAdapter):
             resources.append({'resourceType':'AllergyIntolerance','id':f'{p.id}-allergy-{i}','patient':subject,'code':{'text':a.substance},'category':[a.category] if a.category!='environment' else ['environment'], 'note':[{'text':f'{a.severity}: {a.reaction}'}]})
         for i,l in enumerate(p.labs):
             resources.append({'resourceType':'Observation','id':f'{p.id}-lab-{i}','status':'final','subject':subject,'code':{'text':l.name},'effectiveDateTime':str(l.date), 'valueQuantity':{'value':l.value,'unit':l.unit}})
+        for e in p.encounters:
+            resources.append({'resourceType':'Encounter','id':e.id,'status':e.status,'subject':subject,
+                'type':[{'text':e.type}],'period':{'start':str(e.date)} if e.date else {}})
+        for r in p.diagnostic_reports:
+            resources.append({'resourceType':'DiagnosticReport','id':r.id,'status':r.status,'subject':subject,
+                'code':{'text':r.name},'effectiveDateTime':str(r.date) if r.date else None,'conclusion':r.conclusion})
+        for s in p.imaging_studies:
+            resources.append({'resourceType':'ImagingStudy','id':s.id,'status':'available','subject':subject,
+                'started':str(s.date) if s.date else None,'modality':[{'display':s.modality}] if s.modality else [],
+                'description':s.description})
         return {'resourceType':'Bundle','type':'collection','entry':[{'resource':r} for r in resources]}
 
 
@@ -224,8 +234,37 @@ class FHIRAdapter(BaseEMRAdapter):
         if height_cm is None:missing.append('height (no body height Observation, LOINC 8302-2, in cm/in)')
         if weight_kg is None:missing.append('weight (no body weight Observation, LOINC 29463-7, in kg/lb)')
 
+        # Encounter/DiagnosticReport/ImagingStudy: genuinely optional history (unlike
+        # medications/conditions/labs, a patient legitimately having none isn't a data gap), so an
+        # empty result here is not added to `missing`.
+        encounters=[]
+        for e in self._search('Encounter', pid):
+            type_text=((e.get('type') or [{}])[0].get('text')
+                       or (((e.get('type') or [{}])[0].get('coding') or [{}])[0].get('display'))
+                       or ((e.get('class') or {}).get('display')) or '')
+            encounters.append(Encounter(id=e.get('id', pid), date=_fhir_date((e.get('period') or {}).get('start')),
+                                         type=type_text, status=e.get('status','')))
+
+        diagnostic_reports=[]
+        for r in self._search('DiagnosticReport', pid):
+            code=r.get('code',{})
+            name=code.get('text') or (code.get('coding') or [{}])[0].get('display') or ''
+            when=r.get('effectiveDateTime') or r.get('issued')
+            diagnostic_reports.append(DiagnosticReport(id=r.get('id', pid), date=_fhir_date(when),
+                                                         name=name, status=r.get('status',''),
+                                                         conclusion=r.get('conclusion','')))
+
+        imaging_studies=[]
+        for s in self._search('ImagingStudy', pid):
+            modality=((s.get('modality') or [{}])[0].get('display')
+                      or (s.get('modality') or [{}])[0].get('code') or '')
+            imaging_studies.append(ImagingStudy(id=s.get('id', pid), date=_fhir_date(s.get('started')),
+                                                 modality=modality, description=s.get('description','')))
+
         return Patient(id=pid, name=display_name, age=age, sex=sex or 'unspecified',
                         diagnosis=conditions[0] if conditions else '', scenario='',
                         medications=medications, conditions=conditions, allergies=allergies,
                         labs=labs, history=[], missing=missing, demo=True,
-                        height_cm=height_cm, weight_kg=weight_kg)
+                        height_cm=height_cm, weight_kg=weight_kg,
+                        encounters=encounters, diagnostic_reports=diagnostic_reports,
+                        imaging_studies=imaging_studies)

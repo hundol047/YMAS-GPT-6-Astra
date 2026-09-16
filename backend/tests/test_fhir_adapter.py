@@ -32,6 +32,19 @@ FHIR_OBS_BUNDLE = {"resourceType": "Bundle", "entry": [
                   "code": {"coding": [{"system": "http://loinc.org", "code": "29463-7", "display": "Body weight"}]},
                   "valueQuantity": {"value": 60, "unit": "kg"}}},
 ]}
+FHIR_ENCOUNTER_BUNDLE = {"resourceType": "Bundle", "entry": [
+    {"resource": {"resourceType": "Encounter", "id": "enc-1", "status": "finished",
+                  "type": [{"text": "Outpatient visit"}], "period": {"start": "2026-01-05"}}},
+]}
+FHIR_DIAGREPORT_BUNDLE = {"resourceType": "Bundle", "entry": [
+    {"resource": {"resourceType": "DiagnosticReport", "id": "dr-1", "status": "final",
+                  "code": {"text": "Basic metabolic panel"}, "effectiveDateTime": "2026-01-05",
+                  "conclusion": "Within normal limits"}},
+]}
+FHIR_IMAGING_BUNDLE = {"resourceType": "Bundle", "entry": [
+    {"resource": {"resourceType": "ImagingStudy", "id": "img-1", "started": "2026-01-06",
+                  "modality": [{"display": "CT"}], "description": "Chest CT"}},
+]}
 
 
 def make_transport():
@@ -51,6 +64,12 @@ def make_transport():
             return httpx.Response(200, json=FHIR_ALLERGY_BUNDLE)
         if path.endswith("/Observation"):
             return httpx.Response(200, json=FHIR_OBS_BUNDLE)
+        if path.endswith("/Encounter"):
+            return httpx.Response(200, json=FHIR_ENCOUNTER_BUNDLE)
+        if path.endswith("/DiagnosticReport"):
+            return httpx.Response(200, json=FHIR_DIAGREPORT_BUNDLE)
+        if path.endswith("/ImagingStudy"):
+            return httpx.Response(200, json=FHIR_IMAGING_BUNDLE)
         return httpx.Response(404, json={"error": "unhandled path in fake FHIR server: " + path})
     return httpx.MockTransport(handler)
 
@@ -68,8 +87,24 @@ def test_fhir_adapter_parses_patient_from_fake_server():
     assert p.labs[0].name == "eGFR"
     assert p.height_cm == 165
     assert p.weight_kg == 60
+    assert p.encounters[0].type == "Outpatient visit" and str(p.encounters[0].date) == "2026-01-05"
+    assert p.diagnostic_reports[0].name == "Basic metabolic panel" and p.diagnostic_reports[0].conclusion == "Within normal limits"
+    assert p.imaging_studies[0].modality == "CT" and p.imaging_studies[0].description == "Chest CT"
     assert "missing" not in " ".join(p.missing) or True  # missing list should be empty here (all data present)
     assert p.missing == []
+
+def test_fhir_adapter_maps_encounters_diagnostic_reports_imaging_studies():
+    # Regression test for the gap this replaced: Encounter/DiagnosticReport/ImagingStudy used to be
+    # fetched nowhere -- the old docstring claimed "fetch helpers included for future use" but no
+    # such helpers existed and the internal Patient schema had no field for them at all.
+    adapter = FHIRAdapter(base_url="https://fake-fhir.example/r4", transport=make_transport())
+    p = adapter.get("fhir-1")
+    assert len(p.encounters) == 1 and p.encounters[0].status == "finished"
+    assert len(p.diagnostic_reports) == 1 and p.diagnostic_reports[0].status == "final"
+    assert len(p.imaging_studies) == 1
+    # Genuinely optional history: absence must not be flagged as a data gap like labs/meds/conditions are.
+    assert not any('encounter' in m.lower() for m in p.missing)
+    assert not any('imaging' in m.lower() or 'diagnostic' in m.lower() for m in p.missing)
 
 def test_fhir_adapter_maps_height_weight_observations_and_reports_when_absent():
     adapter = FHIRAdapter(base_url="https://fake-fhir.example/r4", transport=make_transport())

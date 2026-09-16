@@ -8,19 +8,27 @@ SMART launcher or a real FHIR authorization server -- there isn't one reachable 
 only via unit tests that the redirect URL and PKCE parameters are constructed correctly
 (backend/tests/test_cds_hooks.py); the actual authorization round-trip is unverified.
 
-State is kept in a local SQLite file (default backend/data/smart_launch.sqlite3, override with
-SYNEX_SMART_LAUNCH_PATH), so it survives a process restart on a single-instance demo deployment --
-this was previously an in-memory dict that lost every in-flight launch on restart. It still does
-NOT survive across multiple worker processes/replicas sharing no filesystem; a real multi-worker
-deployment needs a shared store (Redis, a real DB) instead, same as backend/app/services/audit.py's
-own SQLite-is-fine-for-one-instance choice.
+State is kept in one of two backends, chosen at import time:
+
+- SYNEX_REDIS_URL set: `_RedisLaunchStore`, backed by a real Redis instance (a launch's state is
+  shared by every worker process/replica that points at the same Redis, and each entry expires on
+  its own after LAUNCH_TTL_SECONDS -- no cleanup job needed). This is the one a real multi-worker
+  deployment should use; verified here against a real `redis-server` process
+  (backend/tests/test_smart_launch_redis.py), not just a mock.
+- otherwise: `_LaunchStore`, a local SQLite file (default backend/data/smart_launch.sqlite3,
+  override with SYNEX_SMART_LAUNCH_PATH). Fine for a single-instance demo deployment and survives a
+  process restart there, but does NOT survive across multiple worker processes/replicas sharing no
+  filesystem -- this is the one real limitation left once SYNEX_REDIS_URL is set: without it, a
+  multi-worker deployment still needs Redis (or a real shared DB) to keep an in-flight SMART launch
+  visible to whichever worker handles the callback.
 """
-import base64, hashlib, os, secrets, sqlite3
+import base64, hashlib, json, os, secrets, sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 import httpx
 
 _DEFAULT_LAUNCH_DB = Path(__file__).resolve().parents[2] / 'data' / 'smart_launch.sqlite3'
+LAUNCH_TTL_SECONDS = 600  # generous for a browser auth redirect round-trip; not a security boundary
 
 
 class _LaunchStore:
@@ -39,6 +47,8 @@ class _LaunchStore:
             db.execute('INSERT OR REPLACE INTO launches VALUES (?,?,?,?,?,?)',
                        (state, data['code_verifier'], data['iss'], data['launch'], data['redirect_uri'],
                         datetime.now(timezone.utc).isoformat()))
+            # Opportunistic TTL cleanup -- no background job, just sweep expired rows on every write.
+            db.execute("DELETE FROM launches WHERE created_at < datetime('now', ?)", (f'-{LAUNCH_TTL_SECONDS} seconds',))
 
     def pop(self, state):
         with self._connect() as db:
@@ -48,7 +58,36 @@ class _LaunchStore:
         return {'code_verifier': row[0], 'iss': row[1], 'launch': row[2], 'redirect_uri': row[3]} if row else None
 
 
-_LAUNCHES = _LaunchStore()
+class _RedisLaunchStore:
+    """Real multi-worker-safe launch state: every worker/replica pointed at the same Redis sees the
+    same in-flight launches, so a SMART callback handled by a different process than the one that
+    started the launch still finds its PKCE code_verifier. Verified against a real local
+    `redis-server`, not a mock (backend/tests/test_smart_launch_redis.py)."""
+    def __init__(self, url):
+        import redis
+        self._r = redis.Redis.from_url(url, decode_responses=True)
+
+    def _key(self, state):
+        return f'synex:smart_launch:{state}'
+
+    def put(self, state, data):
+        self._r.set(self._key(state), json.dumps(data), ex=LAUNCH_TTL_SECONDS)
+
+    def pop(self, state):
+        key = self._key(state)
+        pipe = self._r.pipeline()
+        pipe.get(key)
+        pipe.delete(key)
+        raw, _ = pipe.execute()
+        return json.loads(raw) if raw else None
+
+
+def _build_launch_store():
+    redis_url = os.getenv('SYNEX_REDIS_URL')
+    return _RedisLaunchStore(redis_url) if redis_url else _LaunchStore()
+
+
+_LAUNCHES = _build_launch_store()
 
 
 def _pkce_pair():

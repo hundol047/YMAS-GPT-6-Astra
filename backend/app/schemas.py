@@ -3,6 +3,11 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Unit = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+# `date | None = None` inside a class whose field is itself named `date` self-shadows: Python binds
+# the RHS `None` to the class-local name `date` before evaluating the annotation, so `date | None`
+# becomes `None | None` (TypeError). This alias sidesteps that for Encounter/DiagnosticReport/
+# ImagingStudy below, all of which have an optional `date` field.
+OptionalDate = date | None
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -36,6 +41,25 @@ class Lab(StrictModel):
     low: float | None = Field(default=None, allow_inf_nan=False)
     high: float | None = Field(default=None, allow_inf_nan=False)
 
+class Encounter(StrictModel):
+    id: str
+    date: OptionalDate = None
+    type: str = ''
+    status: str = ''
+
+class DiagnosticReport(StrictModel):
+    id: str
+    date: OptionalDate = None
+    name: str = ''
+    status: str = ''
+    conclusion: str = ''
+
+class ImagingStudy(StrictModel):
+    id: str
+    date: OptionalDate = None
+    modality: str = ''
+    description: str = ''
+
 class Patient(StrictModel):
     id: str
     name: str
@@ -55,6 +79,12 @@ class Patient(StrictModel):
     # never had this recorded; never guessed.
     height_cm: float | None = Field(default=None, ge=30, le=250)
     weight_kg: float | None = Field(default=None, ge=1, le=400)
+    # Optional, additive clinical history. Not consumed by the risk model or rule engine (same
+    # 7-feature contract as always) -- exposed so FHIRAdapter can surface real Encounter/
+    # DiagnosticReport/ImagingStudy data instead of just fetching and discarding it.
+    encounters: list[Encounter] = Field(default_factory=list, max_length=200)
+    diagnostic_reports: list[DiagnosticReport] = Field(default_factory=list, max_length=200)
+    imaging_studies: list[ImagingStudy] = Field(default_factory=list, max_length=200)
     demo: Literal[True] = True
 
 class PatientRequest(StrictModel):
