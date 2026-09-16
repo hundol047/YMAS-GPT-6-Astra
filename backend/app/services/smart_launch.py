@@ -8,13 +8,47 @@ SMART launcher or a real FHIR authorization server -- there isn't one reachable 
 only via unit tests that the redirect URL and PKCE parameters are constructed correctly
 (backend/tests/test_cds_hooks.py); the actual authorization round-trip is unverified.
 
-State is kept in an in-memory dict, fine for a demo/single-process deployment; a real deployment
-needs a shared store (Redis, DB) so launch state survives across workers/restarts.
+State is kept in a local SQLite file (default backend/data/smart_launch.sqlite3, override with
+SYNEX_SMART_LAUNCH_PATH), so it survives a process restart on a single-instance demo deployment --
+this was previously an in-memory dict that lost every in-flight launch on restart. It still does
+NOT survive across multiple worker processes/replicas sharing no filesystem; a real multi-worker
+deployment needs a shared store (Redis, a real DB) instead, same as backend/app/services/audit.py's
+own SQLite-is-fine-for-one-instance choice.
 """
-import base64, hashlib, os, secrets
+import base64, hashlib, os, secrets, sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
 import httpx
 
-_LAUNCHES: dict[str, dict] = {}  # state -> {code_verifier, iss, launch, redirect_uri}
+_DEFAULT_LAUNCH_DB = Path(__file__).resolve().parents[2] / 'data' / 'smart_launch.sqlite3'
+
+
+class _LaunchStore:
+    def __init__(self, path=None):
+        self.path = str(path or os.getenv('SYNEX_SMART_LAUNCH_PATH', _DEFAULT_LAUNCH_DB))
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS launches (state TEXT PRIMARY KEY, code_verifier TEXT NOT NULL, '
+                       'iss TEXT NOT NULL, launch TEXT NOT NULL, redirect_uri TEXT NOT NULL, created_at TEXT NOT NULL)')
+
+    def _connect(self):
+        return sqlite3.connect(self.path, timeout=15)
+
+    def put(self, state, data):
+        with self._connect() as db:
+            db.execute('INSERT OR REPLACE INTO launches VALUES (?,?,?,?,?,?)',
+                       (state, data['code_verifier'], data['iss'], data['launch'], data['redirect_uri'],
+                        datetime.now(timezone.utc).isoformat()))
+
+    def pop(self, state):
+        with self._connect() as db:
+            row = db.execute('SELECT code_verifier, iss, launch, redirect_uri FROM launches WHERE state=?', (state,)).fetchone()
+            if row:
+                db.execute('DELETE FROM launches WHERE state=?', (state,))
+        return {'code_verifier': row[0], 'iss': row[1], 'launch': row[2], 'redirect_uri': row[3]} if row else None
+
+
+_LAUNCHES = _LaunchStore()
 
 
 def _pkce_pair():
@@ -35,7 +69,7 @@ def discover_authorize_endpoint(iss: str, transport=None) -> str:
 def build_authorize_redirect(iss: str, launch: str, client_id: str, redirect_uri: str, scope: str, transport=None) -> str:
     state = secrets.token_urlsafe(16)
     verifier, challenge = _pkce_pair()
-    _LAUNCHES[state] = {'code_verifier': verifier, 'iss': iss, 'launch': launch, 'redirect_uri': redirect_uri}
+    _LAUNCHES.put(state, {'code_verifier': verifier, 'iss': iss, 'launch': launch, 'redirect_uri': redirect_uri})
     authorize_endpoint = discover_authorize_endpoint(iss, transport=transport)
     params = {
         'response_type': 'code', 'client_id': client_id, 'redirect_uri': redirect_uri,
@@ -46,7 +80,7 @@ def build_authorize_redirect(iss: str, launch: str, client_id: str, redirect_uri
 
 
 def exchange_code(state: str, code: str, client_id: str, transport=None) -> dict:
-    launch = _LAUNCHES.get(state)
+    launch = _LAUNCHES.pop(state)
     if not launch:
         raise KeyError('Unknown or expired launch state')
     token_endpoint = discover_authorize_endpoint(launch['iss'], transport=transport).replace('/authorize', '/token')

@@ -101,6 +101,23 @@ def _fhir_date(value):
     try:return _date.fromisoformat(str(value)[:10])
     except ValueError:return None
 
+# Body height/weight Observation unit conversion. Real math (SI/imperial conversion), not a guess --
+# an Observation reported in a unit outside this list is left unmapped (height_cm/weight_kg stay
+# None and the gap is disclosed in `missing`) rather than assumed to be cm/kg.
+def _height_cm(value_quantity):
+    v=value_quantity.get('value');unit=(value_quantity.get('unit') or value_quantity.get('code') or '').strip().lower()
+    if v is None:return None
+    if unit in ('cm','centimeter','centimeters'):return float(v)
+    if unit in ('in','in_i','inch','inches','[in_i]'):return float(v)*2.54
+    return None
+
+def _weight_kg(value_quantity):
+    v=value_quantity.get('value');unit=(value_quantity.get('unit') or value_quantity.get('code') or '').strip().lower()
+    if v is None:return None
+    if unit in ('kg','kilogram','kilograms'):return float(v)
+    if unit in ('lb','lb_av','lbs','pound','pounds','[lb_av]'):return float(v)*0.45359237
+    return None
+
 
 class FHIRAdapter(BaseEMRAdapter):
     def __init__(self, base_url=None, oauth: Optional[SmartOAuthClient]=None, transport=None):
@@ -184,16 +201,31 @@ class FHIRAdapter(BaseEMRAdapter):
             allergies.append(Allergy(substance=substance, severity=severity))
 
         labs=[]
+        height_cm=None; weight_kg=None
         for o in self._search('Observation', pid):
             value=o.get('valueQuantity')
-            eff=_fhir_date(o.get('effectiveDateTime'))
             code=o.get('code',{})
-            text=code.get('text') or (code.get('coding') or [{}])[0].get('display')
+            coding=code.get('coding') or [{}]
+            loinc=next((c.get('code') for c in coding if str(c.get('system','')).endswith('loinc.org')), None)
+            if value is not None and loinc=='8302-2':  # Body height
+                height_cm=_height_cm(value) if height_cm is None else height_cm
+                continue
+            if value is not None and loinc=='29463-7':  # Body weight
+                weight_kg=_weight_kg(value) if weight_kg is None else weight_kg
+                continue
+            eff=_fhir_date(o.get('effectiveDateTime'))
+            text=code.get('text') or coding[0].get('display')
             if value is not None and eff is not None and text:
                 labs.append(Lab(name=text, value=value.get('value',0), unit=value.get('unit',''), date=eff))
         if not labs:missing.append('observations/labs (none returned)')
+        # height_cm/weight_kg only feed the 3D viewer's body-scale approximation, never the risk
+        # model or rule engine -- but a missing/unrecognized-unit Observation is still disclosed
+        # rather than silently defaulting to an average build.
+        if height_cm is None:missing.append('height (no body height Observation, LOINC 8302-2, in cm/in)')
+        if weight_kg is None:missing.append('weight (no body weight Observation, LOINC 29463-7, in kg/lb)')
 
         return Patient(id=pid, name=display_name, age=age, sex=sex or 'unspecified',
                         diagnosis=conditions[0] if conditions else '', scenario='',
                         medications=medications, conditions=conditions, allergies=allergies,
-                        labs=labs, history=[], missing=missing, demo=True)
+                        labs=labs, history=[], missing=missing, demo=True,
+                        height_cm=height_cm, weight_kg=weight_kg)

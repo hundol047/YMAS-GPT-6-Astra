@@ -11,6 +11,9 @@
 
 .new-patient-button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;padding:11px;border:1px dashed #9fc4bd;border-radius:8px;background:#f2f8f6;color:var(--teal);font-size:.8125rem;font-weight:600}
 .new-patient-button:hover{background:#e6f3ef}
+.fhir-lookup{margin-top:12px;padding:10px;border:1px solid #e3d9a8;border-radius:8px;background:#fbf7e8}
+.fhir-lookup p{margin:0 0 8px;line-height:1.4}
+.fhir-lookup .searchbox{margin:0}
 .patient-row .custom-tag{font-size:.625rem;letter-spacing:.4px;background:#eef2fb;color:#4a5ea3;padding:2px 6px;border-radius:4px;margin-left:6px}
 .patient-row-delete{flex-shrink:0;align-self:center;margin-right:8px;background:transparent;color:#8fa2a7;padding:6px;border-radius:6px}
 .patient-row-delete:hover{background:#fbe9e7;color:#ac3d3a}

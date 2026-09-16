@@ -25,6 +25,12 @@ FHIR_ALLERGY_BUNDLE = {"resourceType": "Bundle", "entry": [
 FHIR_OBS_BUNDLE = {"resourceType": "Bundle", "entry": [
     {"resource": {"resourceType": "Observation", "code": {"text": "eGFR"},
                   "effectiveDateTime": "2026-01-01", "valueQuantity": {"value": 45, "unit": "mL/min"}}},
+    {"resource": {"resourceType": "Observation",
+                  "code": {"coding": [{"system": "http://loinc.org", "code": "8302-2", "display": "Body height"}]},
+                  "valueQuantity": {"value": 165, "unit": "cm"}}},
+    {"resource": {"resourceType": "Observation",
+                  "code": {"coding": [{"system": "http://loinc.org", "code": "29463-7", "display": "Body weight"}]},
+                  "valueQuantity": {"value": 60, "unit": "kg"}}},
 ]}
 
 
@@ -60,8 +66,25 @@ def test_fhir_adapter_parses_patient_from_fake_server():
     assert any(m.drug_id == "warfarin" for m in p.medications)
     assert p.allergies[0].substance == "Penicillin"
     assert p.labs[0].name == "eGFR"
+    assert p.height_cm == 165
+    assert p.weight_kg == 60
     assert "missing" not in " ".join(p.missing) or True  # missing list should be empty here (all data present)
     assert p.missing == []
+
+def test_fhir_adapter_maps_height_weight_observations_and_reports_when_absent():
+    adapter = FHIRAdapter(base_url="https://fake-fhir.example/r4", transport=make_transport())
+    p = adapter.get("fhir-1")
+    assert p.height_cm == 165 and p.weight_kg == 60
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/Patient/no-vitals"):
+            return httpx.Response(200, json={"resourceType": "Patient", "id": "no-vitals", "gender": "male", "birthDate": "1990-01-01"})
+        return httpx.Response(200, json=FHIR_EMPTY_BUNDLE)
+    adapter2 = FHIRAdapter(base_url="https://fake-fhir.example/r4", transport=httpx.MockTransport(handler))
+    p2 = adapter2.get("no-vitals")
+    assert p2.height_cm is None and p2.weight_kg is None
+    assert any('height' in m for m in p2.missing)
+    assert any('weight' in m for m in p2.missing)
 
 def test_fhir_adapter_404_returns_none():
     adapter = FHIRAdapter(base_url="https://fake-fhir.example/r4", transport=make_transport())

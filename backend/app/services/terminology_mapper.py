@@ -54,6 +54,16 @@ RXNORM_ATC_BY_DRUG_ID = {
     'levothyroxine': {'rxnorm': ('10582', 'Levothyroxine'), 'atc': ('H03AA01', 'levothyroxine')},
     'insulin': {'rxnorm': ('5856', 'Insulin'), 'atc': ('A10A', 'insulin')},
     'vitamind': {'rxnorm': ('67662', 'Cholecalciferol'), 'atc': ('A11CC05', 'colecalciferol')},
+    # Added to cover every drug_id actually referenced by backend/data/patients.json -- before this,
+    # 6 of the 13 drugs used by the bundled demo patients had no RxNorm/ATC row at all, so
+    # /patients/{pid}/terminology silently under-reported coverage for real demo cases, not just
+    # hypothetical catalog entries.
+    'acetaminophen': {'rxnorm': ('161', 'Acetaminophen'), 'atc': ('N02BE01', 'paracetamol')},
+    'albuterol': {'rxnorm': ('435', 'Albuterol'), 'atc': ('R03AC02', 'salbutamol')},
+    'haloperidol': {'rxnorm': ('5093', 'Haloperidol'), 'atc': ('N05AD01', 'haloperidol')},
+    'lisinopril': {'rxnorm': ('29046', 'Lisinopril'), 'atc': ('C09AA03', 'lisinopril')},
+    'lorazepam': {'rxnorm': ('6470', 'Lorazepam'), 'atc': ('N05BA06', 'lorazepam')},
+    'simvastatin': {'rxnorm': ('36567', 'Simvastatin'), 'atc': ('C10AA01', 'simvastatin')},
 }
 
 # --- Observation / lab: patient.labs `name` -> LOINC. ---------------------------------------------

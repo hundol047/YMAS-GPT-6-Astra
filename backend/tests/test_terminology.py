@@ -7,6 +7,14 @@ def test_known_medication_maps_to_rxnorm():
     assert r.target_system == 'RxNorm'
     assert r.target_code == '11289'
 
+def test_demo_patient_only_medications_are_mapped():
+    # backend/data/patients.json uses these drug_ids; before rule_engine's terminology table was
+    # extended, 6 of them (acetaminophen/albuterol/haloperidol/lisinopril/lorazepam/simvastatin)
+    # had no RxNorm/ATC row at all, so real demo patients silently under-reported coverage.
+    for drug_id in ('acetaminophen', 'albuterol', 'haloperidol', 'lisinopril', 'lorazepam', 'simvastatin'):
+        r = normalize_medication(drug_id, drug_id)
+        assert r.mapping_status == 'mapped', drug_id
+
 def test_unknown_medication_is_unmapped_not_guessed():
     r = normalize_medication('not-a-real-drug-id', 'x')
     assert r.mapping_status == 'unmapped'

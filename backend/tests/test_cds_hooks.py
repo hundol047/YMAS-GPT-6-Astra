@@ -8,6 +8,7 @@ interoperability.
 """
 import httpx
 from app.services import smart_launch
+from app.services.smart_launch import _LaunchStore
 
 def test_cds_services_discovery(client):
     r = client.get('/cds-services')
@@ -69,3 +70,18 @@ def test_smart_exchange_code_via_fake_authorization_server():
     token = smart_launch.exchange_code(state, 'auth-code-1', 'client-1', transport=transport)
     assert token['access_token'] == 'fake-access'
     assert token['patient'] == 'fhir-1'
+
+def test_launch_state_survives_a_process_restart(tmp_path):
+    # Regression test for the bug this replaced: launch state used to live in a plain in-memory
+    # dict, so any worker restart between /smart/launch and /smart/callback silently dropped every
+    # in-flight SMART launch. A fresh _LaunchStore pointed at the same file simulates that restart.
+    db_path = tmp_path / 'smart_launch.sqlite3'
+    store_before_restart = _LaunchStore(path=db_path)
+    store_before_restart.put('state-1', {'code_verifier': 'v1', 'iss': 'https://fake-fhir.example/r4',
+                                          'launch': 'launch-1', 'redirect_uri': 'https://synex.example/callback'})
+    store_after_restart = _LaunchStore(path=db_path)
+    launch = store_after_restart.pop('state-1')
+    assert launch == {'code_verifier': 'v1', 'iss': 'https://fake-fhir.example/r4',
+                       'launch': 'launch-1', 'redirect_uri': 'https://synex.example/callback'}
+    # One-time use: popped again (e.g. a replayed callback) must not resurrect it.
+    assert store_after_restart.pop('state-1') is None
