@@ -117,7 +117,12 @@ ASCII 키워드에는 단어 경계를 적용해 AST가 last, GI가 digoxin에 �
 - 좌측 레이어 목록의 Body/Skeleton 토글은 그대로 유지되며, 추가로 "전신 혈관(Vascular (full))" pseudo-layer가 생깁니다.
 - **장기 10종의 실제 비율**: 처음 이 10종을 real mesh로 연결했을 때는 `organs`의 `p`/`s`가 옛 절차적 모델(구·원기둥)에 맞춰 손으로 정한 값이라, 실제 스캔 장기가 몸통 대비 지나치게 크게 렌더링되는 문제가 있었습니다. 지금은 anatomy.glb의 원본(비정규화) bounding box를 `extrasTransform`과 똑같은 회전·스케일로 변환해 계산한 값으로 다시 채웠습니다 — 그 결과 장기 10종의 최종 크기·위치가 실제 골격/피부와 같은 표본, 같은 축척으로 일치합니다(계산 방법은 `anatomyMap.js`의 주석 참고). 실제 mesh가 없는 5종(pancreas/spleen/bladder/smallIntestine/largeIntestine)은 계속 손으로 정한 절차적 위치를 쓰며, 그중 pancreas/spleen만 stomach의 이동분만큼 같이 옮겨 인접 관계를 유지했습니다. 클릭/강조/레이어 토글 로직 자체는 바뀌지 않았습니다.
 - 화면 하단에 CC BY-SA 2.1 Japan 필수 표기(`ANATOMY_ATTRIBUTION`)가 실제 GLB 로드 시 자동으로 나타납니다.
-- **단일 표본과 성별 크기 보정**: BodyParts3D에는 남/여로 나뉜 전신 세트가 없어(MANIFEST에 별도 female 데이터 없음), 장기 10종과 `skinBody`는 여전히 동일한 참조 성인 표본 하나입니다. 이를 있는 그대로 모든 환자에게 똑같이 보여주는 대신, `anatomyMap.js`의 `SEX_BODY_SCALE`(male 1.0 / female .93 / unspecified .965, 평균 신장 비율 근사치)로 발이 바닥에 붙은 채(`AnatomyModel.jsx`의 발 pivot 스케일) 같은 스캔을 균일 확대·축소합니다. **실제 여성 해부 스캔이 아니라 하나의 실제 스캔을 성별 평균 체구 비율로 조정한 것**이라는 점이 중요합니다 — 절대 "여성 스캔"으로 표기하지 마십시오. GLB가 없을 때의 절차적 대체 모델은 이 보정과 무관하게 기존 `BODY_PROFILES`(남녀 별도 lathe 실루엣)를 그대로 씁니다.
+- **단일 표본과 성별 크기 보정**: BodyParts3D에는 남/여로 나뉜 전신 세트가 없어(MANIFEST에 별도 female 데이터 없음), 장기 10종과 `skinBody`는 여전히 동일한 참조 성인 표본 하나입니다. 이를 있는 그대로 모든 환자에게 똑같이 보여주는 대신, `anatomyMap.js`의 `bodyScaleFor()`로 발이 바닥에 붙은 채(`AnatomyModel.jsx`의 발 pivot 스케일) 같은 스캔을 비균일 확대·축소합니다:
+  - `patient.height_cm`가 있으면 세로(Y) 축척 = `height_cm / REFERENCE_HEIGHT_CM`(172 — 실제 skin mesh bounding box에서 직접 측정한 값). 없으면 기존 `SEX_BODY_SCALE`(male 1.0 / female .93 / unspecified .965, 평균 신장 비율 근사치)로 대체합니다.
+  - `patient.weight_kg`가 있으면 가로/앞뒤(X/Z) 축척 = `sqrt(weight_kg / REFERENCE_WEIGHT_KG)`(65 — 실측이 아니라 "그 키에서 BMI 22 정도"라고 가정한 기준값). 없으면 세로 축척과 동일하게 맞춥니다.
+  - 극단적인 입력값이 스캔을 과도하게 왜곡하지 않도록 두 축 모두 clamp되어 있습니다.
+  - **실제 환자별 체형 재구성이 아니라 하나의 실제 스캔을 키·몸무게 비율로 조정한 근사치**라는 점이 중요합니다 — "환자 맞춤 3D 모델"처럼 과장해 표기하지 마십시오. 이 값들은 위험도 분석(rule engine, ONNX 모델)에는 전혀 쓰이지 않고 3D 시각화에만 영향을 줍니다(`backend/app/schemas.py`의 `Patient.height_cm`/`weight_kg`, 둘 다 optional).
+  - GLB가 없을 때의 절차적 대체 모델은 이 보정과 무관하게 기존 `BODY_PROFILES`(남녀 별도 lathe 실루엣)를 그대로 씁니다.
 
 ## 현재 범위와 확장 지점
 

@@ -22,6 +22,7 @@ function AnatomyWorkspace({patient,analysis,simulation,onOpenAlert,focus,catalog
  const assetStatus=useAnatomyAssetStatus();
  const current=useSimulation&&simulation?simulation.after:analysis,data=current?.anatomy;
  const sex=resolveSex(patient?.sex);
+ const heightCm=patient?.height_cm||null,weightKg=patient?.weight_kg||null;
  useEffect(()=>{setUseSimulation(!!simulation)},[simulation]);
  useEffect(()=>{const q=window.matchMedia('(prefers-reduced-motion: reduce)'),update=()=>setReduced(q.matches);update();q.addEventListener('change',update);return()=>q.removeEventListener('change',update)},[]);
  useEffect(()=>{const h=()=>setFullscreen(!!document.fullscreenElement);document.addEventListener('fullscreenchange',h);return()=>document.removeEventListener('fullscreenchange',h)},[]);
@@ -74,7 +75,7 @@ function AnatomyWorkspace({patient,analysis,simulation,onOpenAlert,focus,catalog
   <div className="an-center">
    <div className="an-viewport"><div className="an-viewport-title">01 / 3D ANATOMY <span>{assetStatus==='loaded'?'BODYPARTS3D · ADULT REFERENCE':'PROCEDURAL REFERENCE'}{sex?` · ${SEX_LABELS[sex].toUpperCase()}`:''}</span></div>
     <Suspense fallback={<div className="an-loading">Loading anatomical model…</div>}>
-     <AnatomyScene {...{selected,choose,hidden,data,mode,position,clipping,view,reduced,sex,bodyOpacity,showLabels,demoImagingOpen:imagingOpen}}/>
+     <AnatomyScene {...{selected,choose,hidden,data,mode,position,clipping,view,reduced,sex,heightCm,weightKg,bodyOpacity,showLabels,demoImagingOpen:imagingOpen}}/>
     </Suspense>
     <div className="an-help">드래그 회전 · 휠 확대 · 우클릭 이동<br/>A 전방 / P 후방 · S 상방 / I 하방</div>
    </div>

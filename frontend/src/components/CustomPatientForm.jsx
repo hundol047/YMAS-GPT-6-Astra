@@ -1,5 +1,6 @@
 import React,{useState} from 'react';
 import {X,Plus,Trash2,UserPlus} from 'lucide-react';
+import DrugCombobox from './DrugCombobox';
 
 const CONDITION_HINTS=['고혈압','만성신부전','고칼륨혈증'];
 const ALLERGY_HINTS=['페니실린','마크로라이드'];
@@ -11,6 +12,7 @@ function num(v){return v===''||v===null||v===undefined?null:Number(v)}
 
 export default function CustomPatientForm({catalog,onClose,onSubmit}){
  const [name,setName]=useState(''),[age,setAge]=useState(''),[sex,setSex]=useState('female'),[diagnosis,setDiagnosis]=useState(''),[scenario,setScenario]=useState('');
+ const [heightCm,setHeightCm]=useState(''),[weightKg,setWeightKg]=useState('');
  const [medications,setMedications]=useState([emptyMed()]);
  const [conditions,setConditions]=useState([]),[conditionInput,setConditionInput]=useState('');
  const [allergies,setAllergies]=useState([]);
@@ -28,6 +30,7 @@ export default function CustomPatientForm({catalog,onClose,onSubmit}){
   const patient={
    id:'CUSTOM-'+Date.now().toString(36).toUpperCase(),
    name:name.trim(),age:Number(age),sex,diagnosis:diagnosis.trim(),scenario:scenario.trim(),
+   height_cm:num(heightCm),weight_kg:num(weightKg),
    medications:medications.filter(m=>m.drug_id).map(m=>({drug_id:m.drug_id,dispenses:num(m.dispenses),started:m.started||null,status:'active',note:m.note||''})),
    conditions,
    allergies:allergies.filter(a=>a.substance.trim()).map(a=>({substance:a.substance.trim(),category:a.category,severity:a.severity,reaction:a.reaction||''})),
@@ -42,7 +45,7 @@ export default function CustomPatientForm({catalog,onClose,onSubmit}){
  <section className="alert-drawer custom-patient-drawer" role="dialog" aria-modal="true" aria-labelledby="custom-patient-title" onClick={e=>e.stopPropagation()}>
   <div className="drawer-top"><span>NEW PATIENT</span><button aria-label="닫기" onClick={onClose}><X size={22}/></button></div>
   <h2 id="custom-patient-title"><UserPlus size={20}/> 환자 직접 입력</h2>
-  <p className="drawer-note">입력한 정보는 이 브라우저 세션에서만 유지되며, 기존 데모 규칙·모델로 동일하게 분석됩니다. 실제 환자 정보를 입력하지 마십시오.</p>
+  <p className="drawer-note">입력한 정보는 이 브라우저 세션에서만 유지되며, 기존 데모 규칙·모델로 동일하게 분석됩니다. 실제 환자 정보를 입력하지 마십시오. 키·몸무게는 위험도 분석에는 쓰이지 않고 3D 인체도 크기를 근사하는 데만 사용됩니다.</p>
   <form onSubmit={submit} className="cp-form">
    <div className="cp-section">
     <h3>기본 정보</h3>
@@ -50,6 +53,8 @@ export default function CustomPatientForm({catalog,onClose,onSubmit}){
      <label>이름<input value={name} onChange={e=>setName(e.target.value)} required maxLength={40}/></label>
      <label>나이<input type="number" min={0} max={120} value={age} onChange={e=>setAge(e.target.value)} required/></label>
      <label>성별<select value={sex} onChange={e=>setSex(e.target.value)}><option value="female">여성</option><option value="male">남성</option></select></label>
+     <label>키(cm)<input type="number" min={30} max={250} step="0.1" value={heightCm} onChange={e=>setHeightCm(e.target.value)} placeholder="선택 입력"/></label>
+     <label>몸무게(kg)<input type="number" min={1} max={400} step="0.1" value={weightKg} onChange={e=>setWeightKg(e.target.value)} placeholder="선택 입력"/></label>
      <label className="cp-wide">진단명<input value={diagnosis} onChange={e=>setDiagnosis(e.target.value)} required maxLength={120}/></label>
      <label className="cp-wide">메모 / 시나리오<input value={scenario} onChange={e=>setScenario(e.target.value)} maxLength={120} placeholder="선택 입력"/></label>
     </div>
@@ -58,7 +63,7 @@ export default function CustomPatientForm({catalog,onClose,onSubmit}){
    <div className="cp-section">
     <h3>복용 약물</h3>
     {medications.map((m,i)=><div className="cp-row" key={i}>
-     <select value={m.drug_id} onChange={e=>updateRow(setMedications,i,{drug_id:e.target.value})}><option value="">약물 선택</option>{catalog.map(d=><option value={d.id} key={d.id}>{d.name_ko} · {d.group_ko}</option>)}</select>
+     <DrugCombobox label={'복용 약물 '+(i+1)} catalog={catalog} value={m.drug_id} onChange={id=>updateRow(setMedications,i,{drug_id:id})}/>
      <input type="number" min={0} max={10000} placeholder="조제/리필" value={m.dispenses} onChange={e=>updateRow(setMedications,i,{dispenses:e.target.value})}/>
      <input type="date" value={m.started} onChange={e=>updateRow(setMedications,i,{started:e.target.value})}/>
      <button type="button" className="cp-remove" aria-label="약물 삭제" onClick={()=>removeRow(setMedications,i)}><Trash2 size={15}/></button>

@@ -20,7 +20,8 @@ test('real FastAPI app: analysis, patient switch, simulation, review and persist
  await user.click(screen.getByRole('button',{name:/김하늘 34세/}));
  await screen.findByText('LOW · 모델 저위험');
  expect(screen.getByText('<0.1')).toBeTruthy();
- await user.selectOptions(screen.getByLabelText('추가 약물'),'warfarin');
+ await user.type(screen.getByLabelText('추가 약물'),'와파린');
+ await user.click(await screen.findByRole('option',{name:/와파린/}));
  await user.click(screen.getByRole('button',{name:'위험 비교'}));
  await screen.findByText('와파린 추가');
  await screen.findByText(/원래 처방 유지/);

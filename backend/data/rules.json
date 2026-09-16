@@ -1343,6 +1343,66 @@
       "b": "warfarin",
       "severity": "위험",
       "reason": "설파메톡사졸/트리메토프림이 와파린의 프로트롬빈 시간을 연장시켜 출혈 위험이 증가하므로 응고시간 재평가가 필요함"
+    },
+    {
+      "a": "simvastatin",
+      "b": "amiodarone",
+      "severity": "위험",
+      "reason": "CYP3A4 억제로 심바스타틴 혈중농도 급상승, 횡문근융해 위험 — FDA는 병용 시 심바스타틴 20mg/일 초과를 금기로 권고"
+    },
+    {
+      "a": "lisinopril",
+      "b": "ibuprofen",
+      "severity": "주의",
+      "reason": "NSAID이 ACE 억제제의 항고혈압 효과를 저하시키고 신기능을 악화시킬 수 있음 (이뇨제 병용 시 급성신손상 위험 추가 상승)"
+    },
+    {
+      "a": "lisinopril",
+      "b": "losartan",
+      "severity": "주의",
+      "reason": "ACE 억제제+ARB 이중 RAS 차단 — 고칼륨혈증·저혈압·신기능 저하 위험 증가, 통상 병용 비권장"
+    },
+    {
+      "a": "methotrexate",
+      "b": "ibuprofen",
+      "severity": "위험",
+      "reason": "NSAID이 메토트렉세이트의 신장 배설을 감소시켜 골수억제 등 독성 위험 증가"
+    },
+    {
+      "a": "valproate",
+      "b": "lamotrigine",
+      "severity": "위험",
+      "reason": "발프로산이 라모트리진 대사(글루쿠론산포합)를 억제해 혈중농도 급상승 — 스티븐스존슨증후군 등 심각한 피부반응 위험 증가"
+    },
+    {
+      "a": "tamoxifen",
+      "b": "fluoxetine",
+      "severity": "주의",
+      "reason": "강력한 CYP2D6 억제로 타목시펜의 활성대사체(엔독시펜) 생성이 감소해 항암 효과가 저하될 수 있음"
+    },
+    {
+      "a": "metoprolol",
+      "b": "glimepiride",
+      "severity": "주의",
+      "reason": "베타차단제가 저혈당의 경고 증상(떨림·심계항진)을 가려 저혈당 인지가 늦어질 위험"
+    },
+    {
+      "a": "allopurinol",
+      "b": "warfarin",
+      "severity": "주의",
+      "reason": "알로퓨리놀이 와파린 대사를 억제해 항응고 효과가 상승할 수 있음 — INR 모니터링 필요"
+    },
+    {
+      "a": "glimepiride",
+      "b": "ciprofloxacin",
+      "severity": "주의",
+      "reason": "플루오로퀴놀론 병용 시 저혈당·고혈당 등 혈당 변동 위험 증가 (FDA 안전성 서한)"
+    },
+    {
+      "a": "digoxin",
+      "b": "hydrochlorothiazide",
+      "severity": "위험",
+      "reason": "티아자이드 이뇨제로 인한 저칼륨혈증이 디곡신 독성(부정맥) 위험을 높일 수 있음"
     }
   ],
   "comorbid": [
@@ -1395,6 +1455,26 @@
       "drug": "meloxicam",
       "condition": "만성신부전",
       "reason": "NSAID 계열은 신기능을 악화시킬 수 있음"
+    },
+    {
+      "drug": "naproxen",
+      "condition": "고혈압",
+      "reason": "NSAID은 혈압을 상승시키고 항고혈압제의 효과를 저하시킬 수 있음"
+    },
+    {
+      "drug": "digoxin",
+      "condition": "만성신부전",
+      "reason": "신기능 저하 시 디곡신 배설이 감소해 독성(부정맥) 위험이 증가할 수 있음 — 혈중농도 모니터링 필요"
+    },
+    {
+      "drug": "methotrexate",
+      "condition": "만성신부전",
+      "reason": "신기능 저하 시 메토트렉세이트 배설이 감소해 독성 위험이 증가할 수 있음"
+    },
+    {
+      "drug": "dexamethasone",
+      "condition": "고혈압",
+      "reason": "전신 스테로이드는 혈압을 상승시켜 고혈압을 악화시킬 수 있음"
     }
   ],
   "allergy": {

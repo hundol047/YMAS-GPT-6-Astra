@@ -117,6 +117,25 @@ export const extrasTransform={scale:.00522,position:[0,-4.49,-.53],rotation:[-Ma
 // and is unaffected by this constant.
 export const SEX_BODY_SCALE={male:1,female:.93,unspecified:.965};
 
+// REFERENCE_HEIGHT_CM is measured, not assumed: the real skin mesh's own bounding box (see
+// extrasTransform) spans -78.11mm to 1641.36mm along its height axis, i.e. ~172cm. REFERENCE_WEIGHT_KG
+// is NOT measured -- mesh geometry alone gives no real mass -- it's an assumed "average BMI ~22 at
+// that height" reference point, used only as the denominator for a width/depth ratio.
+export const REFERENCE_HEIGHT_CM=172;
+export const REFERENCE_WEIGHT_KG=65;
+// Per-patient height/weight body scale for the real-data path, replacing SEX_BODY_SCALE when
+// known (a specific measurement beats a sex-average). Height drives vertical scale directly.
+// Weight drives width/depth *independently*, via sqrt(weight ratio) -- assuming roughly constant
+// body density, mass grows with height*width*depth, so holding height fixed, width~depth scale
+// with sqrt(mass ratio). Both are clamped so an unusual input never grotesquely distorts the one
+// real scan; this is a visual approximation, never a real per-patient body reconstruction.
+export function bodyScaleFor(sex,heightCm,weightKg){
+ const y=clamp(heightCm>0?heightCm/REFERENCE_HEIGHT_CM:SEX_BODY_SCALE[sex||'unspecified'],.55,1.3);
+ const xz=clamp(weightKg>0?Math.sqrt(weightKg/REFERENCE_WEIGHT_KG):y,.7,1.6);
+ return {x:xz,y,z:xz};
+}
+function clamp(v,lo,hi){return Math.min(hi,Math.max(lo,v))}
+
 // Required attribution for BodyParts3D-derived meshes (organs + extras). Must stay visible on
 // screen whenever a GLB asset is loaded -- do not remove.
 export const ANATOMY_ATTRIBUTION='BodyParts3D, © Database Center for Life Science, CC BY-SA 2.1 Japan';

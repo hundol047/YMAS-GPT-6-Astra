@@ -49,6 +49,12 @@ class Patient(StrictModel):
     labs: list[Lab] = Field(max_length=500)
     history: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
+    # Optional, patient-reported build. Never used by the risk model (see docs/MODEL_CARD.md's
+    # fixed 7-feature contract) or the rule engine -- purely for the 3D viewer's body-scale
+    # approximation (frontend/src/data/anatomyMap.js bodyScaleFor). Absent for demo patients that
+    # never had this recorded; never guessed.
+    height_cm: float | None = Field(default=None, ge=30, le=250)
+    weight_kg: float | None = Field(default=None, ge=1, le=400)
     demo: Literal[True] = True
 
 class PatientRequest(StrictModel):

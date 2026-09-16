@@ -34,7 +34,8 @@ test('alert/anatomy navigation, controls, patient identity and systemic mapping 
 });
 test('simulation alerts remain reviewable with their own analysis identity',async()=>{
  const user=userEvent.setup();render(<App/>);await screen.findByText('HIGH · 모델 고위험');
- await user.selectOptions(screen.getByLabelText('추가 약물'),'ibuprofen');
+ await user.type(screen.getByLabelText('추가 약물'),'이부프로펜');
+ await user.click(await screen.findByRole('option',{name:/이부프로펜/}));
  await user.click(screen.getByRole('button',{name:'위험 비교'}));
  await screen.findByText('이부프로펜 추가');
  await user.click(screen.getByRole('tab',{name:'3D 해부학'}));await screen.findByTestId('scene');
