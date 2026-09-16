@@ -5,7 +5,11 @@ import {makeGeometry,buildTorsoLathe} from './geometry';
 import {useAnatomyAssets} from './AnatomyAssets';
 import {useAnatomyExtras} from './AnatomyExtrasAssets';
 import {Line,Html} from '@react-three/drei';
-import {organs,colors,labels,targetsFor,severityFor,BODY_PROFILES,extrasTransform} from '../../data/anatomyMap';
+import {organs,colors,labels,targetsFor,severityFor,BODY_PROFILES,extrasTransform,SEX_BODY_SCALE} from '../../data/anatomyMap';
+
+// Feet/ground level in model units -- matches both the real skin mesh's measured lower bound and
+// the procedural Limb's foot position (see GROUND_PIVOT usage below).
+const GROUND_Y=-4.9;
 
 // Original shaped surfaces: deliberately a reference model, not segmentation.
 const Organ=memo(function Organ({organ,selected,choose,severity,targets,planes,reduced,dim,showLabels,onHover,demoImagingOpen}){
@@ -133,7 +137,12 @@ export default function AnatomyModel({selected,choose,hidden,data,planes,reduced
  const profile=BODY_PROFILES[sex||'unspecified'];
  const opacity=Math.min(1,Math.max(0,(bodyOpacity??55)/100));
  const extras=useAnatomyExtras();
- return <group>
+ // BodyParts3D is a single reference specimen -- SEX_BODY_SCALE only applies a uniform
+ // anthropometric size adjustment to that one real scan (see anatomyMap.js), never a distinct
+ // segmentation. It's a no-op (scale 1, no offset) whenever the real GLB isn't loaded, so the
+ // procedural fallback's own BODY_PROFILES shape difference is unaffected.
+ const sexScale=extras.skinBody?SEX_BODY_SCALE[sex||'unspecified']:1;
+ return <group position={[0,GROUND_Y*(1-sexScale),0]} scale={sexScale}>
  {!hidden.body&&(extras.skinBody
   ?<RealBodyShell planes={planes} opacity={opacity}/>
   :<>

@@ -97,7 +97,7 @@ ASCII 키워드에는 단어 경계를 적용해 AST가 last, GI가 digoxin에 �
 
 ## Patient Digital Twin 업그레이드 (2단계)
 
-- **성별 특화 인체**: `patient.sex`가 `male`/`female`일 때만 해당 체형 프로파일(`anatomyMap.js`의 `BODY_PROFILES`)을 사용합니다. 그 외 값이거나 없으면 "Sex-specific anatomy unavailable" 안내를 표시하고 중립(unspecified) 프로파일로 대체합니다 — 임의 추정하지 않습니다. 몸통은 흉곽·허리·골반 단면 반경이 다른 lathe(회전체) 실루엣이라 남녀가 실제로 다른 형태로 보입니다. GLB로 교체하려면 `frontend/public/models/anatomy/README.md`의 `VITE_ANATOMY_MODEL_URL_MALE`/`_FEMALE`를 참고하십시오.
+- **성별 특화 인체**: `patient.sex`가 `male`/`female`일 때만 해당 체형 프로파일(`anatomyMap.js`의 `BODY_PROFILES`)을 사용합니다. 그 외 값이거나 없으면 "Sex-specific anatomy unavailable" 안내를 표시하고 중립(unspecified) 프로파일로 대체합니다 — 임의 추정하지 않습니다. 몸통은 흉곽·허리·골반 단면 반경이 다른 lathe(회전체) 실루엣이라 남녀가 실제로 다른 형태로 보입니다. 이 프로파일은 실제 GLB가 없을 때의 절차적 모델에만 적용되며, 실제 BodyParts3D 데이터가 로드된 경우의 성별 처리는 아래 "실제 BodyParts3D 데이터 파이프라인"의 `SEX_BODY_SCALE`을 참고하십시오. GLB로 교체하려면 `frontend/public/models/anatomy/README.md`의 `VITE_ANATOMY_MODEL_URL_MALE`/`_FEMALE`를 참고하십시오.
 - **레이어 패널**: Body/Skeleton/장기(15종, 아래 표 참고) 각각에 Eye(표시·숨김), Isolate(단독 보기), 체크박스(다중 선택)를 제공합니다. SHOW ALL / HIDE ALL / SHOW SELECTED / RESET VIEW 버튼은 모두 3D visibility만 바꾸며 환자 데이터나 장기 객체를 삭제하지 않습니다.
 - **BODY OPACITY 슬라이더 + 프리셋**(Skin/Transparent/X-Ray/Organs Only): 신체 셸의 투명도와 body/skeleton 표시 여부를 함께 제어합니다.
 - **PATIENT CONDITIONS 패널**: `patient.conditions`를 그대로 나열하고(없으면 "No documented condition data"), 고정 테이블(`CONDITION_ICD10`)의 ICD-10 코드를 병기합니다. 클릭하면 백엔드가 이미 계산한 `anatomy.targets`의 조건-근거 연결(고정 키워드 매핑, LLM 실시간 추론 아님)을 따라 해당 장기로 포커스하고 body opacity를 낮춥니다. 연결된 장기가 없으면 전신으로 대체합니다.
@@ -110,13 +110,14 @@ ASCII 키워드에는 단어 경계를 적용해 AST가 last, GI가 digoxin에 �
 
 ## 실제 BodyParts3D 데이터 파이프라인 (3단계)
 
-`frontend/public/models/anatomy/anatomy.glb`, `extras.glb`가 설정되어 있으면(둘 다 `.env.local`, 기본 build artifact라 저장소에는 커밋하지 않음) 아래가 절차적 모델을 대체합니다. 실제 BodyParts3D 4.3(DBCLS Anatomography, CC BY-SA 2.1 Japan) mesh를 `build_real_anatomy.py`가 organ별로 병합해 만듭니다 — 자세한 재생성 절차와 mesh 이름 목록은 `frontend/public/models/anatomy/README.md` 참고.
+`frontend/public/models/anatomy/anatomy.glb`, `extras.glb`가 저장소에 커밋되어 있어 별도 빌드 없이 바로 절차적 모델을 대체합니다. 실제 BodyParts3D 4.3(DBCLS Anatomography, CC BY-SA 2.1 Japan) mesh를 `build_real_anatomy.py`가 organ별로 병합해 만듭니다 — 자세한 재생성 절차와 mesh 이름 목록은 `frontend/public/models/anatomy/README.md` 참고.
 
 - **장기 10종**(`anatomy.glb`): brain, rightLung, leftLung, heart, liver, stomach, rightKidney, leftKidney, vascular, spine. 하나라도 없으면 그 장기만 절차적 형상으로 대체됩니다(전체가 되돌아가지 않음, `AnatomyAssets.jsx`).
 - **전신 골격/혈관/피부**(`extras.glb`): `skeletonFull`(약 365개 뼈 mesh 병합), `vascularFull`(약 1466개 혈관 mesh 병합), `skinBody`(전신 피부 단일 mesh, FMA55665). 각각 독립적으로 optional이며 `AnatomyModel.jsx`의 `Skeleton`/`VascularFull`/`RealBodyShell`이 있으면 사용하고 없으면 기존 절차적 형상(Torso/Shell/Limb, 뼈대 primitive)으로 대체합니다.
-- 좌측 레이어 목록의 Body/Skeleton 토글은 그대로 유지되며, 추가로 "전신 혈관(Vascular (full))" pseudo-layer가 생깁니다. 기존 10개 장기의 위치(`organs`의 `p`/`s`)나 클릭/강조 로직은 이 작업으로 전혀 바뀌지 않았습니다 — `extras.glb`는 별도 좌표 변환(`anatomyMap.js`의 `extrasTransform`, scale/position/rotation 한 벌)으로 기존 장기 배치에 맞춰 정렬됩니다.
+- 좌측 레이어 목록의 Body/Skeleton 토글은 그대로 유지되며, 추가로 "전신 혈관(Vascular (full))" pseudo-layer가 생깁니다.
+- **장기 10종의 실제 비율**: 처음 이 10종을 real mesh로 연결했을 때는 `organs`의 `p`/`s`가 옛 절차적 모델(구·원기둥)에 맞춰 손으로 정한 값이라, 실제 스캔 장기가 몸통 대비 지나치게 크게 렌더링되는 문제가 있었습니다. 지금은 anatomy.glb의 원본(비정규화) bounding box를 `extrasTransform`과 똑같은 회전·스케일로 변환해 계산한 값으로 다시 채웠습니다 — 그 결과 장기 10종의 최종 크기·위치가 실제 골격/피부와 같은 표본, 같은 축척으로 일치합니다(계산 방법은 `anatomyMap.js`의 주석 참고). 실제 mesh가 없는 5종(pancreas/spleen/bladder/smallIntestine/largeIntestine)은 계속 손으로 정한 절차적 위치를 쓰며, 그중 pancreas/spleen만 stomach의 이동분만큼 같이 옮겨 인접 관계를 유지했습니다. 클릭/강조/레이어 토글 로직 자체는 바뀌지 않았습니다.
 - 화면 하단에 CC BY-SA 2.1 Japan 필수 표기(`ANATOMY_ATTRIBUTION`)가 실제 GLB 로드 시 자동으로 나타납니다.
-- 이 데이터는 여전히 한 명의 참고 성인 표본이며 환자별 segmentation이 아닙니다. `VITE_ANATOMY_MODEL_URL_MALE`/`_FEMALE`로 성별을 구분한 장기 GLB는 계속 지원하지만, `skinBody`(피부 실루엣)는 성별 구분 없는 단일 참고 모델입니다.
+- **단일 표본과 성별 크기 보정**: BodyParts3D에는 남/여로 나뉜 전신 세트가 없어(MANIFEST에 별도 female 데이터 없음), 장기 10종과 `skinBody`는 여전히 동일한 참조 성인 표본 하나입니다. 이를 있는 그대로 모든 환자에게 똑같이 보여주는 대신, `anatomyMap.js`의 `SEX_BODY_SCALE`(male 1.0 / female .93 / unspecified .965, 평균 신장 비율 근사치)로 발이 바닥에 붙은 채(`AnatomyModel.jsx`의 발 pivot 스케일) 같은 스캔을 균일 확대·축소합니다. **실제 여성 해부 스캔이 아니라 하나의 실제 스캔을 성별 평균 체구 비율로 조정한 것**이라는 점이 중요합니다 — 절대 "여성 스캔"으로 표기하지 마십시오. GLB가 없을 때의 절차적 대체 모델은 이 보정과 무관하게 기존 `BODY_PROFILES`(남녀 별도 lathe 실루엣)를 그대로 씁니다.
 
 ## 현재 범위와 확장 지점
 

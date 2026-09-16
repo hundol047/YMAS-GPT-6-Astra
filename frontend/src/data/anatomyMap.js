@@ -1,18 +1,30 @@
 // Original procedural reference anatomy, model units (not patient millimetres).
 // Patient right is negative X; anterior is positive Z; superior is positive Y.
+//
+// p/s for the 10 organs with real BodyParts3D meshes (brain, rightLung, leftLung, heart, liver,
+// stomach, rightKidney, leftKidney, vascular, spine) are measured, not hand-picked: each organ's
+// raw (unnormalized) bounding box was read from anatomy.glb and run through the exact same
+// rotation+scale as extrasTransform, so a real organ's final rendered size and position match its
+// true proportions and true placement in the same specimen as the real skin/skeleton/vascular
+// mesh (see extrasTransform below and AnatomyAssets.jsx's per-organ 2-unit-cube normalization,
+// which this cancels out exactly when s = real_size_mm * extrasTransform.scale / 2). These same
+// p/s values also drive the procedural fallback shape for these 10 organs when no GLB loads.
+// pancreas/spleen (no real mesh) keep hand-picked shapes but were shifted by stomach's real-data
+// delta so they stay adjacent to it instead of separating; bladder/intestines are unaffected
+// (lower abdomen/pelvis, independent of the upper-abdominal reposition).
 export const organs = [
- {id:'brain',group:'brain',en:'Brain',ko:'뇌',p:[0,3.55,0],s:[.57,.46,.47],color:'#b9a5bd'},
- {id:'rightLung',group:'lungs',en:'Right lung',ko:'우측 폐',p:[-.68,1.67,0],s:[.48,.89,.44],color:'#d59caa'},
- {id:'leftLung',group:'lungs',en:'Left lung',ko:'좌측 폐',p:[.68,1.67,0],s:[.46,.86,.42],color:'#d59caa'},
- {id:'heart',group:'heart',en:'Heart',ko:'심장',p:[.17,1.36,.4],s:[.37,.51,.32],color:'#bc6675'},
- {id:'liver',group:'liver',en:'Liver',ko:'간',p:[-.43,.39,.18],s:[.87,.38,.51],color:'#a77b86'},
- {id:'stomach',group:'stomach',en:'Stomach',ko:'위',p:[.61,.17,.26],s:[.35,.52,.35],color:'#d3b394'},
- {id:'rightKidney',group:'kidneys',en:'Right kidney',ko:'우측 신장',p:[-.61,-.46,-.23],s:[.24,.4,.25],color:'#bd8e7d'},
- {id:'leftKidney',group:'kidneys',en:'Left kidney',ko:'좌측 신장',p:[.61,-.35,-.23],s:[.24,.4,.25],color:'#bd8e7d'},
- {id:'vascular',group:'systemic',en:'Vascular / systemic',ko:'혈관 · 전신',p:[0,.35,-.1],s:[.09,1.85,.09],color:'#ae777b'},
- {id:'spine',group:'skeleton',en:'Spine',ko:'척추',p:[0,.48,-.56],s:[.16,2.15,.16],color:'#bdc8ca'},
- {id:'pancreas',group:'pancreas',en:'Pancreas',ko:'췌장',p:[.05,-.02,-.12],s:[.46,.15,.2],color:'#d7ab8c'},
- {id:'spleen',group:'spleen',en:'Spleen',ko:'비장',p:[.78,.14,-.08],s:[.2,.28,.2],color:'#8a5566'},
+ {id:'brain',group:'brain',en:'Brain',ko:'뇌',p:[-0.004,3.588,-0.114],s:[0.368,0.433,0.469],color:'#b9a5bd'},
+ {id:'rightLung',group:'lungs',en:'Right lung',ko:'우측 폐',p:[-0.348,1.979,0.026],s:[0.319,0.628,0.469],color:'#d59caa'},
+ {id:'leftLung',group:'lungs',en:'Left lung',ko:'좌측 폐',p:[0.346,1.969,0.022],s:[0.319,0.631,0.470],color:'#d59caa'},
+ {id:'heart',group:'heart',en:'Heart',ko:'심장',p:[0.112,1.914,0.114],s:[0.301,0.275,0.278],color:'#bc6675'},
+ {id:'liver',group:'liver',en:'Liver',ko:'간',p:[-0.059,1.415,0.147],s:[0.118,0.195,0.131],color:'#a77b86'},
+ {id:'stomach',group:'stomach',en:'Stomach',ko:'위',p:[0.200,1.244,0.190],s:[0.351,0.305,0.295],color:'#d3b394'},
+ {id:'rightKidney',group:'kidneys',en:'Right kidney',ko:'우측 신장',p:[-0.308,0.829,-0.069],s:[0.149,0.273,0.123],color:'#bd8e7d'},
+ {id:'leftKidney',group:'kidneys',en:'Left kidney',ko:'좌측 신장',p:[0.322,0.926,-0.113],s:[0.150,0.277,0.106],color:'#bd8e7d'},
+ {id:'vascular',group:'systemic',en:'Vascular / systemic',ko:'혈관 · 전신',p:[0.029,1.995,0.002],s:[0.191,1.542,0.297],color:'#ae777b'},
+ {id:'spine',group:'skeleton',en:'Spine',ko:'척추',p:[-0.004,1.327,-0.248],s:[0.308,1.730,0.320],color:'#bdc8ca'},
+ {id:'pancreas',group:'pancreas',en:'Pancreas',ko:'췌장',p:[.05,1.054,-.12],s:[.46,.15,.2],color:'#d7ab8c'},
+ {id:'spleen',group:'spleen',en:'Spleen',ko:'비장',p:[.78,1.214,-.08],s:[.2,.28,.2],color:'#8a5566'},
  {id:'bladder',group:'bladder',en:'Bladder',ko:'방광',p:[0,-1.58,.16],s:[.26,.22,.24],color:'#c9b16a'},
  {id:'smallIntestine',group:'intestine',en:'Small intestine',ko:'소장',p:[0,-.68,.16],s:[.5,.36,.36],color:'#d99aa0'},
  {id:'largeIntestine',group:'intestine',en:'Large intestine',ko:'대장',p:[0,-.8,.1],s:[.72,.5,.46],color:'#c98f95'}
@@ -82,10 +94,20 @@ export const CONDITION_ICD10={
 // Real full-body skeleton/vascular tree merged from BodyParts3D (extras.glb, see
 // AnatomyExtrasAssets.jsx). It is an additional optional layer on top of the 10 organs above --
 // it never repositions or replaces spine/vascular or any other organ mesh/logic. BodyParts3D
-// ships in millimetres with a Z-up axis convention; this single transform (tuned by visual
-// inspection against the existing organ placement, not computed) converts the merged mesh into
-// this app's Y-up model-unit space. See frontend/public/models/anatomy/README.md.
+// ships in millimetres with a Z-up axis convention; this transform converts the merged mesh into
+// this app's Y-up model-unit space (1 unit = 1/scale mm). The 10 real organs' p/s above are
+// derived from this exact same rotation+scale, so both stay in one consistent, real-world-scaled
+// coordinate system. See frontend/public/models/anatomy/README.md.
 export const extrasTransform={scale:.00522,position:[0,-4.49,-.53],rotation:[-Math.PI/2,0,0]};
+
+// BodyParts3D ships one reference adult specimen -- there is no separate real female scan to
+// switch to. Rather than silently showing the same body for every patient, this applies a uniform
+// anthropometric size scale (average adult height ratio) to the *same* real scan when the real
+// data path is active, pivoted from the feet so the figure still stands on the ground. It is
+// explicitly NOT a female-specific segmentation -- never present it as one. The procedural
+// fallback (no real GLB) keeps its own, separate male/female BODY_PROFILES shape difference below
+// and is unaffected by this constant.
+export const SEX_BODY_SCALE={male:1,female:.93,unspecified:.965};
 
 // Required attribution for BodyParts3D-derived meshes (organs + extras). Must stay visible on
 // screen whenever a GLB asset is loaded -- do not remove.
