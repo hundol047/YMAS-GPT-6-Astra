@@ -128,4 +128,96 @@ def exchange_code(state: str, code: str, client_id: str, transport=None) -> dict
         'client_id': client_id, 'code_verifier': launch['code_verifier'],
     })
     r.raise_for_status()
-    return r.json()
+    # 'iss' is not part of the token response itself, but main.py's /smart/callback needs it (to
+    # build a SessionStore entry) and it only ever lived in the now-popped launch state -- add it
+    # rather than making the caller look it up separately. Real token responses don't use this key
+    # (SMART/OAuth2 token responses are access_token/token_type/expires_in/patient/scope/...), so
+    # this can't collide with a real field.
+    return {**r.json(), 'iss': launch['iss']}
+
+
+# --- Post-launch session: what /smart/callback creates so the SPA can know "which patient is this
+# browser's SMART context" WITHOUT the access token ever reaching the browser or a log line. ------
+SESSION_TTL_SECONDS = 8 * 3600  # a clinical shift; not a security boundary, just a sane expiry
+
+
+class _SessionStore:
+    """SQLite-backed by default (same single-instance-demo caveat as _LaunchStore above); set
+    SYNEX_REDIS_URL to share sessions across workers, same as launch state.
+
+    SECURITY BOUNDARY: `access_token` is written here and nowhere else. `context()` -- the only
+    method main.py's /session/context endpoint or any audit.record() call may use -- returns
+    ONLY {patient_id, iss}, never the token. `token_for()` is deliberately separate and prefixed
+    for internal use, reserved for a future authenticated FHIR client call from inside this
+    service; no current endpoint handler calls it, and none should ever serialize its result into
+    an HTTP response, a log message, or an audit detail dict. This class is intentionally the ONLY
+    place a token touches storage, so swapping it for a real secret manager / KMS-backed session
+    store later (a real deployment should) means changing this one class, not call sites.
+    """
+    def __init__(self, path=None):
+        self.path = str(path or os.getenv('SYNEX_SESSION_PATH', Path(__file__).resolve().parents[2] / 'data' / 'smart_session.sqlite3'))
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, '
+                       'iss TEXT NOT NULL, access_token TEXT NOT NULL, created_at TEXT NOT NULL)')
+
+    def _connect(self):
+        return sqlite3.connect(self.path, timeout=15)
+
+    def put(self, session_id, *, patient_id, iss, access_token):
+        with self._connect() as db:
+            db.execute('INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?)',
+                       (session_id, patient_id, iss, access_token, datetime.now(timezone.utc).isoformat()))
+            db.execute("DELETE FROM sessions WHERE created_at < datetime('now', ?)", (f'-{SESSION_TTL_SECONDS} seconds',))
+
+    def context(self, session_id):
+        with self._connect() as db:
+            row = db.execute('SELECT patient_id, iss FROM sessions WHERE session_id=?', (session_id,)).fetchone()
+        return {'patient_id': row[0], 'iss': row[1]} if row else None
+
+    def token_for(self, session_id):  # internal use only -- see class docstring
+        with self._connect() as db:
+            row = db.execute('SELECT access_token FROM sessions WHERE session_id=?', (session_id,)).fetchone()
+        return row[0] if row else None
+
+
+class _RedisSessionStore:
+    """Same SESSION_TTL_SECONDS auto-expiry and token-access-boundary contract as _SessionStore,
+    backed by Redis so every worker/replica sees the same session. Not yet covered by a real
+    redis-server test the way _RedisLaunchStore is (see test_smart_launch_redis.py) -- add one
+    there if this path is put into real use."""
+    def __init__(self, url):
+        import redis
+        self._r = redis.Redis.from_url(url, decode_responses=True)
+
+    def _key(self, session_id):
+        return f'synex:smart_session:{session_id}'
+
+    def put(self, session_id, *, patient_id, iss, access_token):
+        self._r.set(self._key(session_id), json.dumps({'patient_id': patient_id, 'iss': iss, 'access_token': access_token}),
+                     ex=SESSION_TTL_SECONDS)
+
+    def context(self, session_id):
+        raw = self._r.get(self._key(session_id))
+        if not raw:
+            return None
+        d = json.loads(raw)
+        return {'patient_id': d['patient_id'], 'iss': d['iss']}
+
+    def token_for(self, session_id):  # internal use only -- see _SessionStore's class docstring
+        raw = self._r.get(self._key(session_id))
+        return json.loads(raw)['access_token'] if raw else None
+
+
+def _build_session_store():
+    redis_url = os.getenv('SYNEX_REDIS_URL')
+    return _RedisSessionStore(redis_url) if redis_url else _SessionStore()
+
+
+SESSIONS = _build_session_store()
+
+
+def create_session(*, patient_id, iss, access_token) -> str:
+    session_id = secrets.token_urlsafe(24)
+    SESSIONS.put(session_id, patient_id=patient_id, iss=iss, access_token=access_token)
+    return session_id

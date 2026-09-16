@@ -6,6 +6,11 @@
     "sex": "female",
     "diagnosis": "정기 건강 상담",
     "scenario": "저위험 · 기본 검토",
+    "mrn": "2026090001",
+    "date_of_birth": "1992-03-14",
+    "phone": "010-2001-0001",
+    "blood_type": "A+",
+    "emergency_contact": "배우자 010-2001-1001",
     "medications": [
       {
         "drug_id": "vitamind",
@@ -200,6 +205,11 @@
     "sex": "male",
     "diagnosis": "심방세동 · 항응고요법 추적",
     "scenario": "약물 상호작용",
+    "mrn": "2026090012",
+    "date_of_birth": "1954-04-12",
+    "phone": "010-2001-0012",
+    "blood_type": "B+",
+    "emergency_contact": "자녀 010-2001-1012",
     "medications": [
       {
         "drug_id": "warfarin",
@@ -404,6 +414,11 @@
     "sex": "male",
     "diagnosis": "다약제 복용 검토",
     "scenario": "상호작용 없는 다약제 10종",
+    "mrn": "2026090023",
+    "date_of_birth": "1947-01-20",
+    "phone": "010-2001-0023",
+    "blood_type": "O+",
+    "emergency_contact": "배우자 010-2001-1023",
     "medications": [
       {
         "drug_id": "warfarin",
@@ -661,6 +676,11 @@
     "sex": "female",
     "diagnosis": "약물 반응 이력 확인",
     "scenario": "중증 알레르기 이력",
+    "mrn": "2026090034",
+    "date_of_birth": "1980-08-05",
+    "phone": "010-2001-0034",
+    "blood_type": "AB+",
+    "emergency_contact": "자녀 010-2001-1034",
     "medications": [
       {
         "drug_id": "vitamind",
@@ -862,6 +882,11 @@
     "sex": "female",
     "diagnosis": "만성신부전 · 고칼륨혈증",
     "scenario": "기저질환 및 주의 경고 누적",
+    "mrn": "2026090045",
+    "date_of_birth": "1958-11-02",
+    "phone": "010-2001-0045",
+    "blood_type": "A-",
+    "emergency_contact": "배우자 010-2001-1045",
     "medications": [
       {
         "drug_id": "metformin",

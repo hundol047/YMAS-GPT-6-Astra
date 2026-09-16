@@ -71,6 +71,35 @@ def test_smart_exchange_code_via_fake_authorization_server():
     assert token['access_token'] == 'fake-access'
     assert token['patient'] == 'fhir-1'
 
+def test_smart_callback_sets_httponly_cookie_and_never_exposes_token(monkeypatch, client):
+    # exchange_code() itself (the real network round-trip) is covered by the test above; this
+    # isolates /smart/callback's own job -- creating a session and setting a cookie -- from that.
+    import app.main as main_module
+    monkeypatch.setattr(main_module, 'exchange_code',
+                         lambda state, code, client_id: {'access_token': 'super-secret-token', 'patient': 'SYN-002',
+                                                          'iss': 'https://fake-fhir.example/r4'})
+    r = client.get('/smart/callback?code=abc&state=xyz', follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers['location'] == '/'
+    assert 'super-secret-token' not in r.text
+    assert 'super-secret-token' not in str(r.headers)
+    set_cookie = r.headers.get('set-cookie', '')
+    assert 'synex_session=' in set_cookie
+    assert 'super-secret-token' not in set_cookie
+    assert 'httponly' in set_cookie.lower()
+    assert 'samesite=lax' in set_cookie.lower()
+
+    session_id = r.cookies.get('synex_session')
+    r2 = client.get('/session/context', cookies={'synex_session': session_id})
+    assert r2.status_code == 200
+    assert r2.json() == {'patient_id': 'SYN-002'}
+    assert 'super-secret-token' not in r2.text
+
+def test_session_context_with_no_cookie_returns_no_patient(client):
+    r = client.get('/session/context')
+    assert r.status_code == 200
+    assert r.json() == {'patient_id': None}
+
 def test_launch_state_survives_a_process_restart(tmp_path):
     # Regression test for the bug this replaced: launch state used to live in a plain in-memory
     # dict, so any worker restart between /smart/launch and /smart/callback silently dropped every

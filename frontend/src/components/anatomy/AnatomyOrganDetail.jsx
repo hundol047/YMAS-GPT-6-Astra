@@ -9,6 +9,20 @@ const TABS=[['clinical','Clinical Data'],['anatomy','Anatomy'],['imaging','Imagi
 // Warnings tabs the Patient Digital Twin spec calls for. Labs/Medication use the fixed
 // anatomyMap.ORGAN_LABS table and the backend's own alert sources -- never an LLM guess at
 // runtime.
+// Deterministic monotonic-trend check over real stored lab values (last 3 points) -- same method
+// as backend/app/services/clinical_summary.py, applied client-side here so the 3D detail panel can
+// show it without a round-trip. "감지" (detected) only, never "진단"/"확정" -- this is a trend
+// observation, not a clinical diagnosis.
+function labTrend(points){
+ const recent=points.slice(-3);
+ if(recent.length<2)return null;
+ const values=recent.map(p=>p.value);
+ const diffs=values.slice(1).map((v,i)=>v-values[i]);
+ if(diffs.every(d=>d>0))return{direction:'상승',values};
+ if(diffs.every(d=>d<0))return{direction:'하락',values};
+ return null;
+}
+
 export default function AnatomyOrganDetail(props){
  const {selected,data,patient,catalog,demoImagingOpen,onOpenImaging}=props;
  const [tab,setTab]=useState('clinical');
@@ -18,6 +32,10 @@ export default function AnatomyOrganDetail(props){
  const severity=severityFor(targets);
  const labNames=organ?(ORGAN_LABS[organ.group]||[]):[];
  const labs=(patient?.labs||[]).filter(l=>labNames.includes(l.name));
+ const labsByName={};
+ labs.forEach(l=>{(labsByName[l.name]=labsByName[l.name]||[]).push(l)});
+ Object.values(labsByName).forEach(arr=>arr.sort((a,b)=>a.date.localeCompare(b.date)));
+ const findings=Object.entries(labsByName).map(([name,points])=>{const t=labTrend(points);return t?{name,...t}:null}).filter(Boolean);
  const medIds=[...new Set(targets.flatMap(t=>t.sources.filter(s=>s.type==='medication').map(s=>s.name)))];
  const meds=(patient?.medications||[]).filter(m=>medIds.includes(m.drug_id));
  const medInfo=id=>catalog?.find(d=>d.id===id)||{name_ko:id,group_ko:''};
@@ -39,7 +57,13 @@ export default function AnatomyOrganDetail(props){
  </section>}
  {tab==='labs'&&<section className="an-risk-panel">
   <h3>LABS</h3>
-  {labs.length?labs.map((l,i)=><div key={i} className="an-lab-row"><b>{l.name}</b><span>{l.value} {l.unit}</span><small>{l.date} · 참고범위 {l.low}–{l.high}</small></div>):<p>이 장기와 연결된 검사 데이터가 없습니다.</p>}
+  {Object.keys(labsByName).length?Object.entries(labsByName).map(([name,points])=><div key={name} className="an-lab-row">
+    <b>{name}</b>
+    <span>{points.map(p=>p.value).join(' → ')} <small>{points.at(-1).unit}</small></span>
+    <small>{points.at(-1).date} · 참고범위 {points.at(-1).low}–{points.at(-1).high}</small>
+   </div>):<p>이 장기와 연결된 검사 데이터가 없습니다.</p>}
+  <h4 className="an-findings-head">SynexAgent Findings</h4>
+  {findings.length?findings.map((f,i)=><p key={i} className="an-finding">{f.name} {f.direction} 추세 감지 ({f.values.join(' → ')}). 임상적 확정 진단이 아니며 원기록 확인이 필요합니다.</p>):<p className="an-note">감지된 연속 추세가 없습니다.</p>}
  </section>}
  {tab==='medication'&&<section className="an-risk-panel">
   <h3>MEDICATION</h3>

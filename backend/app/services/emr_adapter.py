@@ -23,6 +23,7 @@ from typing import Optional
 import httpx
 from ..schemas import Patient, Medication, Allergy, Lab, Encounter, DiagnosticReport, ImagingStudy
 from .rule_engine import DRUGS
+from .terminology_mapper import RXCUI_TO_DRUG_ID
 
 
 class BaseEMRAdapter(ABC):
@@ -32,6 +33,16 @@ class BaseEMRAdapter(ABC):
     def get(self, pid: str): ...
     @abstractmethod
     def bundle(self, pid: str) -> Optional[dict]: ...
+    def mutate(self, pid: str):
+        """Return the LIVE Patient object (not a copy) for Clinical Workspace repositories
+        (backend/app/services/repositories.py) to append encounters/notes/orders/results onto.
+        Only DemoAdapter supports this -- a real hospital FHIR server is the system of record for
+        its own resources, so writing a new order/note back into it needs a real FHIR write
+        integration this app does not have. Honest NotImplementedError here, same pattern as
+        FHIRAdapter.list()."""
+        raise NotImplementedError('This EMR adapter does not support local write-back of '
+                                   'Clinical Workspace records (encounters/notes/orders/results). '
+                                   'Only EMR_MODE=demo does.')
 
 
 class DemoAdapter(BaseEMRAdapter):
@@ -42,6 +53,10 @@ class DemoAdapter(BaseEMRAdapter):
     def get(self,pid):
         p=self.patients.get(pid)
         return p.model_copy(deep=True) if p else None
+    def mutate(self,pid):
+        p=self.patients.get(pid)
+        if p is None:raise KeyError(pid)
+        return p
     def bundle(self,pid):
         p=self.get(pid)
         if p is None:return None
@@ -195,7 +210,16 @@ class FHIRAdapter(BaseEMRAdapter):
         for kind in ('MedicationRequest','MedicationStatement'):
             for m in self._search(kind, pid):
                 coding=(m.get('medicationCodeableConcept',{}).get('coding') or [{}])[0]
-                drug_id=coding.get('code') or 'unknown'
+                raw_code=coding.get('code') or 'unknown'
+                # If the code came in as a real RxNorm coding, recover our internal catalog id via
+                # the verified reverse table (terminology_mapper.RXCUI_TO_DRUG_ID) so it matches the
+                # rule engine/catalog; otherwise use the code as-is (this is also what our own
+                # DemoAdapter.bundle() emits: urn:synexagent:drug-catalog codings ARE already the
+                # internal id). An RxCUI with no reverse-table entry falls through unchanged --
+                # still visible to the clinician and still flagged via feature_engineering.py's
+                # `unknown` catalog-mismatch list, never silently dropped.
+                system=str(coding.get('system') or '')
+                drug_id=RXCUI_TO_DRUG_ID.get(raw_code,raw_code) if 'rxnorm' in system.lower() else raw_code
                 status=m.get('status','active')
                 medications.append(Medication(drug_id=drug_id,
                     status='active' if status in ('active','in-progress') else 'stopped',

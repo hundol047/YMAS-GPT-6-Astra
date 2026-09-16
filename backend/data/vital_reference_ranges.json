@@ -1,0 +1,9 @@
+{
+  "_disclaimer": "SynexAgent prototype policy for flagging vital signs in the UI. NOT a clinical guideline or any real institution's policy -- same status as backend/data/rules.json and rule_engine.py's freshness table (backend/app/services/data_quality.py). A vital not listed here is never flagged by guesswork.",
+  "sbp": {"low": 90, "high": 140, "critical_low": 70, "critical_high": 180, "unit": "mmHg"},
+  "dbp": {"low": 60, "high": 90, "critical_low": 40, "critical_high": 120, "unit": "mmHg"},
+  "heart_rate": {"low": 60, "high": 100, "critical_low": 40, "critical_high": 130, "unit": "bpm"},
+  "respiratory_rate": {"low": 12, "high": 20, "critical_low": 8, "critical_high": 30, "unit": "breaths/min"},
+  "temperature_c": {"low": 36.1, "high": 37.8, "critical_low": 35.0, "critical_high": 39.5, "unit": "°C"},
+  "spo2": {"low": 95, "high": 100, "critical_low": 90, "critical_high": 100, "unit": "%"}
+}

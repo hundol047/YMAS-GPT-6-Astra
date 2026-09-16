@@ -55,6 +55,31 @@ def test_never_granted_actions_refused_for_every_role():
         for action in NEVER_GRANTED:
             assert not u.can(action)
 
+def test_clinical_workspace_actions_granted_to_every_clinician_role():
+    # note:*/order:*/patient:write were added for the Clinical Workspace round. They deliberately
+    # sit in the same "clinical documentation/workflow" bucket as the pre-existing alert:review/
+    # feedback:submit -- granted to every clinician-ish role including clinician_readonly (see
+    # docs/EMR_INTEGRATION.md and auth.py's module docstring for why a separate restricted role
+    # would be RBAC-shaped but not RBAC), never to raw patient:edit (still in NEVER_GRANTED).
+    for role in ('clinician_readonly', 'clinician', 'pharmacist', 'admin'):
+        u = User(id='x', role=role)
+        for action in ('patient:write', 'note:read', 'note:write', 'note:sign', 'order:read', 'order:write'):
+            assert u.can(action), f'{role} should be able to {action}'
+        assert not u.can('patient:edit')
+
+def test_clinical_workspace_endpoints_require_auth_in_oidc_mode(monkeypatch):
+    # Before this round, /patients, /patients/{id}, /patients/{id}/fhir had no Depends(require(...))
+    # at all -- reachable with zero token check even in AUTH_MODE=oidc. Confirm that's closed.
+    from app.main import app
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv('AUTH_MODE', 'oidc')
+    monkeypatch.setenv('OIDC_ISSUER', 'https://fake-idp.example')
+    monkeypatch.setenv('OIDC_AUDIENCE', 'synexagent')
+    with TestClient(app) as c:
+        for path in ('/patients', '/patients/SYN-002', '/patients/SYN-002/fhir', '/patients/SYN-002/encounters'):
+            r = c.get(path)
+            assert r.status_code == 401, f'{path} should require a bearer token in oidc mode, got {r.status_code}'
+
 def test_oidc_token_verifies_and_maps_role():
     key, jwk = _make_rsa_jwk()
     now = int(time.time())

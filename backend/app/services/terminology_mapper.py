@@ -66,6 +66,16 @@ RXNORM_ATC_BY_DRUG_ID = {
     'simvastatin': {'rxnorm': ('36567', 'Simvastatin'), 'atc': ('C10AA01', 'simvastatin')},
 }
 
+# Reverse index (RxCUI -> internal drug_catalog.json id), derived from RXNORM_ATC_BY_DRUG_ID above --
+# never a separately-maintained or separately-guessed table, so it can't drift from the forward
+# table or introduce a code that isn't already verified there. Used by FHIRAdapter._to_patient
+# (emr_adapter.py) to recover a matching internal drug_id when an incoming FHIR MedicationRequest/
+# MedicationStatement carries a standard RxNorm coding instead of our own catalog id -- without this,
+# a real hospital's RxNorm-coded medication would show up as an unrecognized drug_id (still visible
+# to the clinician and still flagged in Patient.missing via feature_engineering.py's `unknown` list,
+# never silently dropped) instead of matching the catalog/rule engine.
+RXCUI_TO_DRUG_ID = {row['rxnorm'][0]: drug_id for drug_id, row in RXNORM_ATC_BY_DRUG_ID.items()}
+
 # --- Observation / lab: patient.labs `name` -> LOINC. ---------------------------------------------
 LOINC_BY_LAB_NAME = {
     'Creatinine': ('2160-0', 'Creatinine [Mass/volume] in Serum or Plasma'),

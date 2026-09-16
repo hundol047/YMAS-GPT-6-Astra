@@ -60,6 +60,142 @@ class ImagingStudy(StrictModel):
     modality: str = ''
     description: str = ''
 
+class VitalSigns(StrictModel):
+    id: str
+    encounter_id: str
+    sbp: int | None = Field(default=None, ge=40, le=300)
+    dbp: int | None = Field(default=None, ge=20, le=200)
+    heart_rate: int | None = Field(default=None, ge=20, le=250)
+    respiratory_rate: int | None = Field(default=None, ge=4, le=60)
+    temperature_c: float | None = Field(default=None, ge=25, le=45, allow_inf_nan=False)
+    spo2: int | None = Field(default=None, ge=0, le=100)
+    # Encounter-time snapshot, independent of Patient.height_cm/weight_kg (which is a single
+    # latest-known value used only for the 3D viewer). BMI is never stored -- see
+    # backend/app/services/vitals.py's bmi() -- so it can never go stale relative to these two.
+    height_cm: float | None = Field(default=None, ge=30, le=250)
+    weight_kg: float | None = Field(default=None, ge=1, le=400)
+    measured_at: str
+    recorder: str = ''
+
+class ClinicalNoteAmendment(StrictModel):
+    author: str = Field(min_length=1)
+    # Mandatory -- an amendment to a signed note must always say who changed it and why. There is
+    # no code path that creates an amendment without both (see ClinicalNoteRepository.amend());
+    # a PATCH on a signed note is rejected outright rather than silently becoming an amendment.
+    reason: str = Field(min_length=1, max_length=500)
+    created_at: str
+    subjective: str = ''
+    objective: str = ''
+    assessment: str = ''
+    plan: str = ''
+
+class ClinicalNote(StrictModel):
+    id: str
+    encounter_id: str
+    patient_id: str
+    subjective: str = Field(default='', max_length=4000)
+    objective: str = Field(default='', max_length=4000)
+    assessment: str = Field(default='', max_length=4000)
+    plan: str = Field(default='', max_length=4000)
+    status: Literal['draft','signed'] = 'draft'
+    author: str
+    created_at: str
+    updated_at: str
+    signed_at: str | None = None
+    # A signed note's S/O/A/P fields above are frozen at sign time (enforced in
+    # ClinicalNoteRepository, not here) -- any later edit becomes a new amendment instead of
+    # overwriting the original, so the signed record is never silently rewritten.
+    amendments: list[ClinicalNoteAmendment] = Field(default_factory=list, max_length=100)
+
+class Diagnosis(StrictModel):
+    id: str
+    patient_id: str
+    encounter_id: str
+    code: str = ''
+    code_system: Literal['ICD-10','SNOMED-CT','text'] = 'text'
+    display_name: str = Field(min_length=1, max_length=200)
+    diagnosis_type: Literal['primary','secondary'] = 'secondary'
+    status: Literal['active','resolved'] = 'active'
+    diagnosed_at: str
+    clinician: str = ''
+
+class MedicationOrder(StrictModel):
+    id: str
+    patient_id: str
+    encounter_id: str
+    medication_code: str = Field(min_length=1, max_length=80)  # drug_catalog.json id
+    medication_name: str = ''
+    dose: float = Field(gt=0, le=100000, allow_inf_nan=False)
+    dose_unit: str = Field(min_length=1, max_length=20)
+    route: Literal['PO','IV','IM','SC','topical']
+    frequency: str = Field(default='', max_length=40)
+    duration: str = Field(default='', max_length=40)
+    quantity: float | None = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
+    prn: bool = False
+    indication: str = Field(default='', max_length=200)
+    start_date: date | None = None
+    end_date: date | None = None
+    prescriber: str = ''
+    ordered_at: str
+    status: Literal['pending_review','confirmed','cancelled'] = 'pending_review'
+    # Required (enforced in the /medication-orders endpoint, not here) only when the SynexAgent
+    # precheck raised a warning and the clinician confirms anyway.
+    override_reason: str | None = Field(default=None, max_length=500)
+
+    @field_validator('end_date')
+    @classmethod
+    def end_not_before_start(cls, v, info):
+        start = info.data.get('start_date')
+        if v is not None and start is not None and v < start:
+            raise ValueError('end_date must not be before start_date')
+        return v
+
+class LabOrder(StrictModel):
+    id: str
+    patient_id: str
+    encounter_id: str
+    test_code: str = ''
+    test_name: str = Field(min_length=1, max_length=120)
+    panel: str = ''
+    priority: Literal['routine','urgent','stat'] = 'routine'
+    indication: str = Field(default='', max_length=200)
+    ordering_physician: str = ''
+    ordered_at: str
+    status: Literal['ordered','collected','processing','completed','cancelled'] = 'ordered'
+
+class LabResult(StrictModel):
+    id: str
+    lab_order_id: str
+    patient_id: str
+    test_code: str = ''
+    test_name: str
+    value: float = Field(allow_inf_nan=False)
+    unit: str = ''
+    reference_low: float | None = Field(default=None, allow_inf_nan=False)
+    reference_high: float | None = Field(default=None, allow_inf_nan=False)
+    abnormal_flag: Literal['normal','high','low','critical'] = 'normal'
+    measured_at: str
+    reported_at: str
+
+class ClinicalEncounter(StrictModel):
+    # Named ClinicalEncounter (not Encounter) to avoid colliding with the FHIR-resource-shaped
+    # `Encounter` model above, which Patient.encounters already uses for FHIRAdapter passthrough.
+    id: str
+    patient_id: str
+    encounter_type: Literal['outpatient','inpatient','emergency','telemedicine']
+    department: str = ''
+    attending_physician: str = ''
+    started_at: str
+    ended_at: str | None = None
+    status: Literal['in_progress','completed','cancelled'] = 'in_progress'
+    chief_complaint: str = Field(default='', max_length=300)
+    vital_signs: list[VitalSigns] = Field(default_factory=list, max_length=50)
+    note_ids: list[str] = Field(default_factory=list, max_length=50)
+    diagnosis_ids: list[str] = Field(default_factory=list, max_length=50)
+    medication_order_ids: list[str] = Field(default_factory=list, max_length=50)
+    lab_order_ids: list[str] = Field(default_factory=list, max_length=50)
+    signed: bool = False
+
 class Patient(StrictModel):
     id: str
     name: str
@@ -85,6 +221,20 @@ class Patient(StrictModel):
     encounters: list[Encounter] = Field(default_factory=list, max_length=200)
     diagnostic_reports: list[DiagnosticReport] = Field(default_factory=list, max_length=200)
     imaging_studies: list[ImagingStudy] = Field(default_factory=list, max_length=200)
+    # Clinical Workspace demographic/identifier fields. All optional so every existing
+    # patients.json entry and every existing test payload (which omit them) keeps validating.
+    mrn: str | None = Field(default=None, max_length=40)
+    date_of_birth: OptionalDate = None
+    phone: str | None = Field(default=None, max_length=40)
+    address: str | None = Field(default=None, max_length=200)
+    blood_type: str | None = Field(default=None, max_length=10)
+    emergency_contact: str | None = Field(default=None, max_length=120)
+    # Structured clinical history. `conditions`/`medications`/`labs` above remain the flat,
+    # unchanged contract the rule engine/risk model read -- creating a Diagnosis/MedicationOrder/
+    # LabResult also dual-writes into those flat lists (see repositories.py), so this structured
+    # layer is additive and never replaces the existing pipeline's inputs.
+    problem_list: list[Diagnosis] = Field(default_factory=list, max_length=100)
+    clinical_encounters: list[ClinicalEncounter] = Field(default_factory=list, max_length=100)
     demo: Literal[True] = True
 
 class PatientRequest(StrictModel):
@@ -112,3 +262,98 @@ class ReviewRequest(StrictModel):
         if not value.strip():
             raise ValueError("Review reason must not be blank")
         return value.strip()
+
+# --- Clinical Workspace request bodies (main.py's /encounters, /notes, /medication-orders,
+# /lab-orders endpoints). Small, endpoint-scoped request shapes -- not the same as the stored
+# resource models above (e.g. no id/status/timestamps, which the repository assigns). ------------
+
+class EncounterCreateRequest(StrictModel):
+    encounter_type: Literal['outpatient','inpatient','emergency','telemedicine']
+    department: str = Field(default='', max_length=80)
+    attending_physician: str = Field(default='', max_length=80)
+    chief_complaint: str = Field(default='', max_length=300)
+
+class EncounterUpdateRequest(StrictModel):
+    status: Literal['in_progress','completed','cancelled'] | None = None
+    ended_at: str | None = None
+    signed: bool | None = None
+
+class VitalsCreateRequest(StrictModel):
+    sbp: int | None = Field(default=None, ge=40, le=300)
+    dbp: int | None = Field(default=None, ge=20, le=200)
+    heart_rate: int | None = Field(default=None, ge=20, le=250)
+    respiratory_rate: int | None = Field(default=None, ge=4, le=60)
+    temperature_c: float | None = Field(default=None, ge=25, le=45, allow_inf_nan=False)
+    spo2: int | None = Field(default=None, ge=0, le=100)
+    height_cm: float | None = Field(default=None, ge=30, le=250)
+    weight_kg: float | None = Field(default=None, ge=1, le=400)
+    recorder: str = Field(default='', max_length=80)
+
+class NoteCreateRequest(StrictModel):
+    author: str = Field(min_length=1, max_length=80)
+    subjective: str = Field(default='', max_length=4000)
+    objective: str = Field(default='', max_length=4000)
+    assessment: str = Field(default='', max_length=4000)
+    plan: str = Field(default='', max_length=4000)
+
+class NoteUpdateRequest(StrictModel):
+    subjective: str | None = Field(default=None, max_length=4000)
+    objective: str | None = Field(default=None, max_length=4000)
+    assessment: str | None = Field(default=None, max_length=4000)
+    plan: str | None = Field(default=None, max_length=4000)
+
+class NoteAmendRequest(StrictModel):
+    author: str = Field(min_length=1, max_length=80)
+    reason: str = Field(min_length=1, max_length=500)
+    subjective: str | None = Field(default=None, max_length=4000)
+    objective: str | None = Field(default=None, max_length=4000)
+    assessment: str | None = Field(default=None, max_length=4000)
+    plan: str | None = Field(default=None, max_length=4000)
+
+class DiagnosisCreateRequest(StrictModel):
+    display_name: str = Field(min_length=1, max_length=200)
+    diagnosis_type: Literal['primary','secondary'] = 'secondary'
+    code: str = Field(default='', max_length=40)
+    code_system: Literal['ICD-10','SNOMED-CT','text'] = 'text'
+    clinician: str = Field(default='', max_length=80)
+
+class MedicationOrderCreateRequest(StrictModel):
+    medication_code: str = Field(min_length=1, max_length=80)
+    medication_name: str = Field(default='', max_length=120)
+    dose: float = Field(gt=0, le=100000, allow_inf_nan=False)
+    dose_unit: str = Field(min_length=1, max_length=20)
+    route: Literal['PO','IV','IM','SC','topical']
+    frequency: str = Field(default='', max_length=40)
+    duration: str = Field(default='', max_length=40)
+    quantity: float | None = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
+    prn: bool = False
+    indication: str = Field(default='', max_length=200)
+    start_date: date | None = None
+    end_date: date | None = None
+    prescriber: str = Field(default='', max_length=80)
+    # Required by the /medication-orders endpoint (not here) only when the server-side SynexAgent
+    # precheck (re-run there, never trusted from the client) finds a new warning; a clean precheck
+    # can confirm with this omitted. /medication-orders/precheck ignores this field entirely.
+    override_reason: str | None = Field(default=None, max_length=500)
+
+    @field_validator('end_date')
+    @classmethod
+    def end_not_before_start(cls, v, info):
+        start = info.data.get('start_date')
+        if v is not None and start is not None and v < start:
+            raise ValueError('end_date must not be before start_date')
+        return v
+
+class LabOrderCreateRequest(StrictModel):
+    test_code: str = Field(default='', max_length=40)
+    test_name: str = Field(min_length=1, max_length=120)
+    panel: str = Field(default='', max_length=80)
+    priority: Literal['routine','urgent','stat'] = 'routine'
+    indication: str = Field(default='', max_length=200)
+    ordering_physician: str = Field(default='', max_length=80)
+
+class LabResultCreateRequest(StrictModel):
+    value: float = Field(allow_inf_nan=False)
+    unit: str = Field(default='', max_length=20)
+    reference_low: float | None = Field(default=None, allow_inf_nan=False)
+    reference_high: float | None = Field(default=None, allow_inf_nan=False)

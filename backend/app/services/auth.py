@@ -16,6 +16,16 @@ read, analysis read, alert review, audit read). NEVER_GRANTED lists the actions 
 explicitly forbids automating (patient edit, auto prescription changes, rule edits, user admin);
 there is no endpoint implementing any of them, and `can()` refuses them unconditionally so a future
 endpoint has to consciously bypass this check rather than silently skip it.
+
+Clinical Workspace note/order actions (note:read/write/sign, order:read/write) follow the SAME
+"clinical documentation and workflow, not raw EMR data mutation" bucket as the pre-existing
+alert:review/feedback:submit -- they were deliberately added to every clinician-ish role
+(clinician_readonly included), not split into a separate restricted role, because no endpoint in
+this app actually needs a "can view but never document or order" tier and inventing one that no
+code path distinguishes would be a role that looks like RBAC but isn't (see docs/EMR_INTEGRATION.md
+for the same reasoning applied earlier to the pre-existing roles). What DID change this round: many
+patient-data endpoints previously had no `Depends(require(...))` at all, so in AUTH_MODE=oidc they
+were reachable with no token check whatsoever -- those are now gated for real (see main.py).
 """
 import os, time
 from dataclasses import dataclass
@@ -23,11 +33,17 @@ from typing import Optional
 import httpx
 from fastapi import Header, HTTPException
 
+_CLINICIAN_ACTIONS = {'patient:read', 'patient:write', 'analysis:read', 'alert:review', 'audit:read', 'feedback:submit',
+                       'note:read', 'note:write', 'note:sign', 'order:read', 'order:write'}
+# 'patient:write' here means clinical documentation on a patient (encounter/vitals/diagnosis
+# creation) -- a workflow action, same bucket as alert:review/note:write. It is NOT 'patient:edit'
+# (NEVER_GRANTED below): raw demographic/EMR-record editing is a different, permanently-blocked
+# action that no endpoint implements.
 ROLE_PERMISSIONS = {
-    'clinician_readonly': {'patient:read', 'analysis:read', 'alert:review', 'audit:read', 'feedback:submit'},
-    'clinician': {'patient:read', 'analysis:read', 'alert:review', 'audit:read', 'feedback:submit'},
-    'pharmacist': {'patient:read', 'analysis:read', 'alert:review', 'audit:read', 'feedback:submit'},
-    'admin': {'patient:read', 'analysis:read', 'alert:review', 'audit:read', 'feedback:submit', 'user:admin'},
+    'clinician_readonly': set(_CLINICIAN_ACTIONS),
+    'clinician': set(_CLINICIAN_ACTIONS),
+    'pharmacist': set(_CLINICIAN_ACTIONS),
+    'admin': _CLINICIAN_ACTIONS | {'user:admin'},
 }
 NEVER_GRANTED = {'patient:edit', 'prescription:auto_modify', 'rule:edit'}
 

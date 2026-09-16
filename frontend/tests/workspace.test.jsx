@@ -8,7 +8,7 @@ test('real FastAPI app: analysis, patient switch, simulation, review and persist
  const user=userEvent.setup();render(<App/>);
  await screen.findByRole('heading',{name:'박도윤 72세 / 남성'});
  await screen.findByText('HIGH · 모델 고위험');
- expect(screen.getByText('95.3')).toBeTruthy();
+ expect(screen.getByText('95')).toBeTruthy();// SYNEX RISK INDEX: rounded 0-100 index, not a percentage
  const interaction=screen.getByRole('button',{name:/아스피린 \+ 와파린/});await user.click(interaction);
  const dialog=screen.getByRole('dialog');
  await user.type(within(dialog).getByLabelText('판단 근거 또는 확인 내용'),'DOM 통합 테스트: 원처방 검토');
@@ -19,7 +19,8 @@ test('real FastAPI app: analysis, patient switch, simulation, review and persist
  await screen.findAllByText('DOM 통합 테스트: 원처방 검토');
  await user.click(screen.getByRole('button',{name:/김하늘 34세/}));
  await screen.findByText('LOW · 모델 저위험');
- expect(screen.getByText('<0.1')).toBeTruthy();
+ const riskCard=screen.getByText('SYNEX RISK INDEX').closest('.risk-card');
+ expect(within(riskCard).getByText('0')).toBeTruthy();// rounds a near-zero probability to 0/100
  await user.type(screen.getByLabelText('추가 약물'),'와파린');
  await user.click(await screen.findByRole('option',{name:/와파린/}));
  await user.click(screen.getByRole('button',{name:'위험 비교'}));
