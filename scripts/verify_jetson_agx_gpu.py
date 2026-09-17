@@ -55,6 +55,40 @@ def detect_tensorrt_python():
         return {'available': False, 'error': str(e)}
 
 
+def _profiled_session_node_counts(requested_provider, providers_used, fp16_enabled):
+    """Builds a SEPARATE ONNX Runtime session -- same model, same provider list RiskEngine actually
+    selected -- but with SessionOptions.enable_profiling=True, so real per-node execution can be
+    proven rather than inferred from provider registration alone. Runs a few inferences (a single
+    call is not always enough for every node's profiling event to be flushed the same way), then
+    calls session.end_profiling() and parses the resulting Chrome-Trace-Event JSON via
+    jetson_common.count_nodes_by_provider(). Returns ({} on any failure -- never raises) so a caller
+    that can't get profiling evidence falls back to INFERENCE_PASSED rather than crashing the whole
+    verification run."""
+    import onnxruntime as ort
+    from app.services.risk_inference import MODEL_PATH, _provider_list_with_options
+    import numpy as np
+    try:
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 1
+        opts.enable_profiling = True
+        session = ort.InferenceSession(str(MODEL_PATH), sess_options=opts,
+                                        providers=_provider_list_with_options(providers_used, fp16=fp16_enabled))
+        x = np.asarray([[1, .5, .5, 0, 0, .2, .2]], dtype=np.float32)
+        for _ in range(5):
+            session.run(['risk_probability'], {'features': x})
+        profile_path = session.end_profiling()
+        try:
+            counts = jc.count_nodes_by_provider(profile_path)
+        finally:
+            # This is a scratch trace file for this one verification run, not a deployment
+            # artifact -- remove it so repeated runs don't litter the working directory.
+            Path(profile_path).unlink(missing_ok=True)
+        return counts
+    except Exception:
+        return {}
+
+
 def onnxruntime_report(requested_provider):
     import onnxruntime as ort
     from app.services.risk_inference import RiskEngine
@@ -72,34 +106,62 @@ def onnxruntime_report(requested_provider):
     warm_inference_ms = (time.perf_counter() - t1) * 1000
     requested_name = jc.PROVIDER_NAMES[requested_provider]
     selected = session_providers[0] if session_providers else None
-    verified = requested_name in available and requested_name in session_providers and 0 <= pred['risk_probability'] <= 1
-    # Phase 7: CUDA and TensorRT get their own, distinct verified messages -- "TensorRT verified"
-    # is never printed unless TensorrtExecutionProvider itself was actually selected, and a GPU
-    # wheel without the TensorRT EP compiled in is reported as CUDA-verified-but-TensorRT-not-
-    # available, not silently upgraded to a TensorRT claim.
+    inference_ok = 0 <= pred['risk_probability'] <= 1
+
+    # Real per-node execution proof (item #8/#9): provider registration + a passing inference is
+    # NEVER, by itself, reported as EXECUTION_VERIFIED. A separate profiled session actually counts
+    # nodes attributed to each provider by ONNX Runtime's own trace output. Run uniformly for every
+    # requested provider (including cpu) so the status ladder is applied consistently rather than
+    # special-cased.
+    node_counts = _profiled_session_node_counts(requested_provider, session_providers, engine.fp16_enabled)
+    nodes_executed = node_counts.get(requested_name)
+    status_code = jc.classify_provider_status(
+        requested_name, available_providers=available, session_providers=session_providers,
+        inference_ok=inference_ok, nodes_executed=nodes_executed,
+    )
+
+    # Human-readable status kept alongside the unified vocabulary -- never claims an
+    # "ACCELERATION VERIFIED" wording unless status_code is actually EXECUTION_VERIFIED for THIS
+    # requested provider specifically; TensorRT engine-cache creation or CUDA-session-registration
+    # alone never upgrades to a TensorRT claim.
     if requested_provider == 'cpu':
         status = 'CPU SAFE MODE'
-    elif requested_provider == 'cuda':
-        status = 'CUDA ACCELERATION VERIFIED' if verified else 'CPU SAFE MODE'
-    else:  # tensorrt
-        if verified:
-            status = 'TENSORRT ACCELERATION VERIFIED'
-        elif 'CUDAExecutionProvider' in session_providers:
-            status = 'CUDA ACCELERATION VERIFIED / TENSORRT EP NOT AVAILABLE'
-        else:
-            status = 'CPU SAFE MODE'
+    elif status_code == 'EXECUTION_VERIFIED':
+        status = f'{requested_name} EXECUTION VERIFIED (nodes_executed={nodes_executed})'
+    elif status_code == 'INFERENCE_PASSED':
+        status = f'{requested_name} INFERENCE PASSED / NODE EXECUTION NOT PROVEN'
+    elif status_code == 'SESSION_REGISTERED':
+        status = f'{requested_name} SESSION REGISTERED / INFERENCE NOT CONFIRMED'
+    elif status_code == 'FALLBACK':
+        status = f'{requested_name} NOT USED BY SESSION -- FALLBACK ({selected})'
+    else:
+        status = 'CPU SAFE MODE'
+
+    # Per-provider status independent of which one was "requested" -- e.g. --provider tensorrt on a
+    # device with CUDA but no TensorRT EP will FALLBACK to CUDA; deploy_jetson_agx.sh's --require-gpu
+    # (which accepts either CUDA or TensorRT) needs CUDA's own EXECUTION_VERIFIED status directly,
+    # not something derived from the "requested" provider's FALLBACK status. --require-tensorrt must
+    # never be satisfied by this: it checks provider_status['TensorrtExecutionProvider'] specifically.
+    provider_status = {
+        name: jc.classify_provider_status(name, available_providers=available, session_providers=session_providers,
+                                           inference_ok=inference_ok, nodes_executed=node_counts.get(name))
+        for name in ('CPUExecutionProvider', 'CUDAExecutionProvider', 'TensorrtExecutionProvider')
+    }
     return {
         'requested_provider': requested_name,
         'available_providers': available,
         'session_providers': session_providers,
         'selected_provider': selected,
+        'provider_status': provider_status,
         'fallback_reason': engine.fallback_reason,
         'fp16_enabled': engine.fp16_enabled,
         'model_sha256': engine.sha256,
         'inference_result': pred['risk_probability'],
         'cold_start_ms': round(cold_start_ms, 2),
         'warm_inference_ms': round(warm_inference_ms, 2),
-        'gpu_acceleration_verified': verified if requested_provider != 'cpu' else None,
+        'nodes_executed_by_provider': node_counts,
+        'verification_status': status_code,
+        'gpu_acceleration_verified': (status_code == 'EXECUTION_VERIFIED') if requested_provider != 'cpu' else None,
         'status': status,
     }
 
@@ -132,7 +194,9 @@ def print_summary(report):
         f"HARDWARE: {'Jetson AGX Orin' if hw['hardware_is_agx_orin'] else (hw['orin_family'] or 'not Jetson')}",
         f"ARCH: {hw['machine_arch']}",
         f"ORT STATUS: {onnx['status']}",
+        f"ORT VERIFICATION STATUS: {onnx['verification_status']}",
         f"ORT SESSION PROVIDERS: {onnx['session_providers']}",
+        f"NODES EXECUTED BY PROVIDER: {onnx['nodes_executed_by_provider']}",
     ]
     if api is not None:
         if api['reachable']:

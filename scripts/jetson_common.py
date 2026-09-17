@@ -90,10 +90,23 @@ def detect_hardware(allow_other_orin: bool = False) -> dict:
 
 
 # --- JetPack / L4T / CUDA family classification -------------------------------------------------
-# Deliberately a RANGE-based classifier, not a hardcoded exact-version assumption: it recognizes
-# which release *family* a detected L4T/CUDA major version belongs to without asserting a specific
-# minor/patch version ever shipped. New minor releases within a family need no code change here;
-# a genuinely new major generation needs a new range added, never a guessed version number.
+# An EXACT mapping table, not a range guess: each L4T major version this function recognizes is a
+# real, documented JetPack generation (JetPack 5 = L4T 34/35, JetPack 6 = L4T 36, JetPack 7 =
+# L4T 39 -- NVIDIA's own release notes, not this project's invention). An L4T major this table
+# doesn't list (e.g. 37/38, which NVIDIA never shipped as a JetPack-numbered L4T release, or
+# anything newer than what's listed here) returns None ("unsupported"/unrecognized) rather than
+# guessing a family for it -- adding support for a genuinely new generation means adding a new
+# entry here with its real, confirmed L4T major, never inferring one.
+L4T_MAJOR_TO_JETPACK_FAMILY = {34: 'jetpack5', 35: 'jetpack5', 36: 'jetpack6', 39: 'jetpack7'}
+CUDA_MAJOR_TO_JETPACK_FAMILY = {11: 'jetpack5', 12: 'jetpack6', 13: 'jetpack7'}
+
+
+def classify_jetpack_family(l4t_major: int | None) -> str | None:
+    if l4t_major is None:
+        return None
+    return L4T_MAJOR_TO_JETPACK_FAMILY.get(l4t_major)
+
+
 def classify_l4t_family(nv_tegra_release_text: str | None) -> dict:
     if not nv_tegra_release_text:
         return {'l4t_major': None, 'l4t_revision': None, 'jetpack_family': None}
@@ -101,17 +114,11 @@ def classify_l4t_family(nv_tegra_release_text: str | None) -> dict:
     rev_match = re.search(r'REVISION:\s*([\d.]+)', nv_tegra_release_text)
     major = int(major_match.group(1)) if major_match else None
     revision = rev_match.group(1) if rev_match else None
-    family = None
-    if major is not None:
-        if 34 <= major <= 36:
-            family = 'jetpack6'
-        elif 37 <= major <= 39:
-            family = 'jetpack7'
-    return {'l4t_major': major, 'l4t_revision': revision, 'jetpack_family': family}
+    return {'l4t_major': major, 'l4t_revision': revision, 'jetpack_family': classify_jetpack_family(major)}
 
 
 def classify_cuda_family(cuda_version_str: str | None) -> dict:
-    """cuda_version_str is expected like '12.6' or '13.0' (from nvcc --version or
+    """cuda_version_str is expected like '11.4', '12.6', or '13.0' (from nvcc --version or
     /usr/local/cuda/version.json) -- returns the major/minor split and which JetPack family that
     CUDA major version is associated with, purely for cross-checking against the L4T-derived
     family (a mismatch between the two is a signal worth surfacing, not silently ignored)."""
@@ -121,8 +128,7 @@ def classify_cuda_family(cuda_version_str: str | None) -> dict:
     if not m:
         return {'cuda_major': None, 'cuda_minor': None, 'jetpack_family': None}
     major, minor = int(m.group(1)), int(m.group(2))
-    family = 'jetpack6' if major == 12 else 'jetpack7' if major == 13 else None
-    return {'cuda_major': major, 'cuda_minor': minor, 'jetpack_family': family}
+    return {'cuda_major': major, 'cuda_minor': minor, 'jetpack_family': CUDA_MAJOR_TO_JETPACK_FAMILY.get(major)}
 
 
 def extract_cuda_version_from_nvcc(nvcc_output: str | None) -> str | None:
@@ -154,8 +160,23 @@ def extract_tensorrt_version(dpkg_tensorrt_output: str | None) -> dict:
 
 
 def python_abi_tag() -> str:
+    """The ABI of the interpreter RUNNING THIS CODE -- only meaningful when the caller genuinely
+    wants that (e.g. detect_jetson_env.py describing the host's own default python3). Selecting a
+    GPU ONNX Runtime candidate for a target venv must use python_abi_of(target_python) instead --
+    never this function -- since the installer script and the target venv can be different
+    interpreters (see install_jetson_ort.py)."""
     import sys
     return f'cp{sys.version_info.major}{sys.version_info.minor}'
+
+
+def python_abi_of(python_bin: str) -> str | None:
+    """Queries the ABI of a SPECIFIC python executable (e.g. the target .venv-jetson interpreter)
+    by actually running it, rather than assuming it matches whatever interpreter is running this
+    installer script. Returns None if that interpreter can't be invoked."""
+    out = run([python_bin, '-c', "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')"])
+    if out is None or out.startswith('ERROR:') or out == '(empty output)':
+        return None
+    return out.strip()
 
 
 # --- Exact deployment-profile matching -----------------------------------------------------------
@@ -193,6 +214,29 @@ def load_profiles(path: Path | None = None) -> list:
     return json.loads(path.read_text(encoding='utf-8'))['profiles']
 
 
+def load_ort_candidates(path: Path | None = None) -> list:
+    path = path or (ROOT / 'config' / 'jetson_ort_candidates.json')
+    return json.loads(path.read_text(encoding='utf-8'))['candidates']
+
+
+def resolve_ort_candidate_for_profile(profile: dict | None, candidates: list) -> dict | None:
+    """The ONLY sanctioned path from a verified deployment profile to an actual ONNX Runtime
+    install: look up profile['ort_candidate_id'] in the candidates list by id. Deliberately does
+    NOT fall back to matching environment fields directly against candidates -- see this module's
+    and config/jetson_agx_orin_profiles.json's docstrings for why (a verified profile proves the
+    ENVIRONMENT was confirmed on real hardware; it does not by itself supply a working wheel, and a
+    candidate must be explicitly linked to that specific verified profile, never inferred)."""
+    if profile is None:
+        return None
+    candidate_id = profile.get('ort_candidate_id')
+    if not candidate_id:
+        return None
+    for c in candidates:
+        if c.get('id') == candidate_id and c.get('install_method') is not None:
+            return c
+    return None
+
+
 # --- Provider requirement name mapping ------------------------------------------------------------
 PROVIDER_NAMES = {'cpu': 'CPUExecutionProvider', 'cuda': 'CUDAExecutionProvider', 'tensorrt': 'TensorrtExecutionProvider'}
 
@@ -200,7 +244,13 @@ PROVIDER_NAMES = {'cpu': 'CPUExecutionProvider', 'cuda': 'CUDAExecutionProvider'
 def check_gpu_requirement(session_providers: list, require_gpu: bool, require_tensorrt: bool) -> tuple:
     """Returns (ok, reason). --require-tensorrt implies --require-gpu's CUDA check is not enough on
     its own -- TensorrtExecutionProvider specifically must be the session's actual provider set.
-    A session that silently fell back to CPU never satisfies either flag."""
+    A session that silently fell back to CPU never satisfies either flag.
+
+    NOTE: this checks session REGISTRATION only (session.get_providers()). The stricter gate
+    deploy_jetson_agx.sh actually enforces for --require-gpu/--require-tensorrt additionally
+    requires EXECUTION_VERIFIED status (see classify_provider_status/count_nodes_by_provider
+    below) -- a provider merely being registered on the session is not, by itself, proof any node
+    actually ran on it."""
     if require_tensorrt:
         if 'TensorrtExecutionProvider' in session_providers:
             return True, None
@@ -210,3 +260,75 @@ def check_gpu_requirement(session_providers: list, require_gpu: bool, require_te
             return True, None
         return False, 'A GPU execution provider was required but the session used CPU only'
     return True, None
+
+
+def check_gpu_requirement_by_status(provider_status: dict, require_gpu: bool, require_tensorrt: bool) -> tuple:
+    """The STRICTER gate deploy_jetson_agx.sh actually enforces for --require-gpu/--require-tensorrt:
+    takes the provider_status dict scripts/verify_jetson_agx_gpu.py's onnxruntime_report() produces
+    (each of CPUExecutionProvider/CUDAExecutionProvider/TensorrtExecutionProvider mapped to one of
+    VERIFICATION_STATUSES), and requires EXECUTION_VERIFIED specifically -- never satisfied by
+    AVAILABLE/SESSION_REGISTERED/INFERENCE_PASSED/FALLBACK, which all fall short of real per-node
+    execution proof. --require-tensorrt is never satisfied by a CUDA-only fallback, however verified
+    CUDA's own status is. Returns (ok, reason)."""
+    if require_tensorrt:
+        status = provider_status.get('TensorrtExecutionProvider')
+        if status == 'EXECUTION_VERIFIED':
+            return True, None
+        return False, f'--require-tensorrt: TensorrtExecutionProvider status={status!r}, need EXECUTION_VERIFIED'
+    if require_gpu:
+        cuda_status = provider_status.get('CUDAExecutionProvider')
+        trt_status = provider_status.get('TensorrtExecutionProvider')
+        if cuda_status == 'EXECUTION_VERIFIED' or trt_status == 'EXECUTION_VERIFIED':
+            return True, None
+        return False, (f'--require-gpu: CUDA status={cuda_status!r}, TensorRT status={trt_status!r}, '
+                        'need EXECUTION_VERIFIED on at least one')
+    return True, None
+
+
+# --- Unified verification status vocabulary -------------------------------------------------------
+# A ladder from "never seen" to "proven to have actually executed a node" -- FALLBACK is the one
+# side-branch (the provider WAS available, but the live session ended up using something else).
+# "the provider name appears in get_available_providers()/session.get_providers()" is NEVER, by
+# itself, reported as more than AVAILABLE/SESSION_REGISTERED -- EXECUTION_VERIFIED requires actual
+# per-node profiling evidence (see count_nodes_by_provider), and INFERENCE_PASSED (a real forward
+# pass succeeded end-to-end) sits between the two because a real deployment may not always be able
+# to gather per-node attribution (e.g. an older ORT build whose profiling JSON omits the `provider`
+# arg on Node events) and should not be reported as "not verified" purely for that reason -- but it
+# is also never silently upgraded to EXECUTION_VERIFIED without that evidence.
+VERIFICATION_STATUSES = ('NOT_AVAILABLE', 'AVAILABLE', 'SESSION_REGISTERED', 'FALLBACK', 'INFERENCE_PASSED', 'EXECUTION_VERIFIED')
+
+
+def classify_provider_status(provider_name: str, *, available_providers: list, session_providers: list | None = None,
+                              inference_ok: bool | None = None, nodes_executed: int | None = None) -> str:
+    if provider_name not in available_providers:
+        return 'NOT_AVAILABLE'
+    if session_providers is None:
+        return 'AVAILABLE'
+    if provider_name not in session_providers:
+        return 'FALLBACK'
+    if not inference_ok:
+        return 'SESSION_REGISTERED'
+    if nodes_executed is None:
+        return 'INFERENCE_PASSED'
+    return 'EXECUTION_VERIFIED' if nodes_executed > 0 else 'INFERENCE_PASSED'
+
+
+def count_nodes_by_provider(profiling_json_path) -> dict:
+    """Parses an ONNX Runtime profiling trace (from SessionOptions.enable_profiling=True +
+    session.end_profiling()) and counts 'Node' category events per the `provider` field ORT
+    attaches to each node's profiling event args. Returns {} (never raises) if the file can't be
+    read/parsed, or if this ORT build's profiling output doesn't include a `provider` arg per node
+    -- callers must treat an empty dict as 'node-level execution not proven', not as zero nodes
+    definitely having run on every provider."""
+    try:
+        events = json.loads(Path(profiling_json_path).read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+    counts: dict = {}
+    for e in events if isinstance(events, list) else []:
+        if not isinstance(e, dict) or e.get('cat') != 'Node':
+            continue
+        provider = (e.get('args') or {}).get('provider')
+        if provider:
+            counts[provider] = counts.get(provider, 0) + 1
+    return counts

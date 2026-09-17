@@ -20,6 +20,7 @@ frontend/dist/models/
 /SynexAgent-YMAS-*.tar.gz
 *.log
 .sites-runtime/
+onnxruntime_profile__*.json
 
 # Root-level intermediate copies from build_real_anatomy.py (the served copies under
 # frontend/public/models/anatomy/*.glb are tracked -- see that folder's README.md for how

@@ -1,5 +1,5 @@
 {
-  "_readme": "ONNX Runtime GPU install candidates for Jetson, keyed by the EXACT detected environment (jetpack_family + cuda_major + python_abi + arch). This file ships EMPTY of real candidates on purpose: no wheel URL, filename, or version here has been verified installable/importable on a real Jetson AGX Orin from this development environment (which is x86_64 and has no ARM64 wheel to test). scripts/install_jetson_ort.py REFUSES to guess a URL for an unlisted combination -- it reports 'no candidate configured' and the caller falls back to CPU Safe Mode. To add a real candidate: on the target Jetson device, obtain the correct ARM64 ONNX Runtime GPU wheel for that exact JetPack from an official NVIDIA source (Jetson AI Lab / Jetson Zoo / NVIDIA's JetPack-matched pip index for that L4T release), add an entry below with the fields filled from what you actually installed, and confirm the install with `python3 scripts/verify_jetson_agx_gpu.py` before relying on it here.",
+  "_readme": "ONNX Runtime GPU install candidates for Jetson. A candidate is selected ONLY by id, looked up via a VERIFIED entry in config/jetson_agx_orin_profiles.json's ort_candidate_id field (see jetson_common.resolve_ort_candidate_for_profile) -- never by matching jetpack_family/cuda_major/python_abi/arch directly against a candidate. Those fields are kept here as documentary metadata (so a human reading this file can sanity-check a candidate against its linked profile), not as an independent match key. This file ships EMPTY of real candidates on purpose: no wheel URL, filename, or version here has been verified installable/importable on a real Jetson AGX Orin from this development environment (which is x86_64 and has no ARM64 wheel to test). scripts/install_jetson_ort.py REFUSES to guess a URL for a profile with no resolvable candidate -- it reports 'no verified ORT candidate' and the caller falls back to CPU Safe Mode. To add a real candidate: on the target Jetson device, obtain the correct ARM64 ONNX Runtime GPU wheel for that exact JetPack from an official NVIDIA source (Jetson AI Lab / Jetson Zoo / NVIDIA's JetPack-matched pip index for that L4T release), add an entry below with the fields filled from what you actually installed, link it from a verified profile's ort_candidate_id, and confirm the install with `python3 scripts/verify_jetson_agx_gpu.py` before relying on it here.",
   "candidates": [
     {
       "id": "template-unfilled",
@@ -11,7 +11,7 @@
       "pip_index_url": null,
       "wheel_filename_or_spec": null,
       "package_name": null,
-      "notes": "Placeholder. Never filled from a guess -- only from a real successful install on the target device."
+      "notes": "Placeholder. Never filled from a guess -- only from a real successful install on the target device, and only ever reached via a verified profile's ort_candidate_id."
     }
   ]
 }

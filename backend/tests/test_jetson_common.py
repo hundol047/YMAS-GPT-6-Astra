@@ -3,6 +3,7 @@ these run on ANY machine (no real Jetson needed) because they operate on synthet
 not live system state. See test_jetson_scripts.py for the integration-level tests that actually
 invoke the scripts as subprocesses on this machine's real (non-Jetson) environment.
 """
+import json
 import sys
 from pathlib import Path
 
@@ -73,6 +74,20 @@ def test_detect_hardware_on_this_actual_machine_reports_not_agx_orin():
 
 
 # --- L4T -> JetPack family classification --------------------------------------------------------
+
+def test_jetpack_family_exact_mapping_table():
+    assert jc.classify_jetpack_family(34) == 'jetpack5'
+    assert jc.classify_jetpack_family(35) == 'jetpack5'
+    assert jc.classify_jetpack_family(36) == 'jetpack6'
+    assert jc.classify_jetpack_family(39) == 'jetpack7'
+    assert jc.classify_jetpack_family(37) is None   # never shipped as a JetPack-numbered L4T -- unsupported
+    assert jc.classify_jetpack_family(38) is None
+    assert jc.classify_jetpack_family(99) is None    # unrecognized future major -- never guessed
+    assert jc.classify_jetpack_family(None) is None
+
+def test_l4t_34_and_35_are_jetpack5_family():
+    assert jc.classify_l4t_family('# R34 (release), REVISION: 1.0')['jetpack_family'] == 'jetpack5'
+    assert jc.classify_l4t_family('# R35 (release), REVISION: 4.1')['jetpack_family'] == 'jetpack5'
 
 def test_l4t_36_is_jetpack6_family():
     r = jc.classify_l4t_family('# R36 (release), REVISION: 4.3, GCID: 12345678, BOARD: t234ref')
@@ -171,34 +186,159 @@ def test_no_requirement_always_passes():
     assert ok is True and reason is None
 
 
-# --- Dependency policy: never both onnxruntime and onnxruntime-gpu ------------------------------
+# --- The STRICTER EXECUTION_VERIFIED-based gate deploy_jetson_agx.sh actually enforces -------------
+
+def test_require_gpu_by_status_fails_with_cpu_only():
+    ok, reason = jc.check_gpu_requirement_by_status(
+        {'CPUExecutionProvider': 'EXECUTION_VERIFIED', 'CUDAExecutionProvider': 'NOT_AVAILABLE',
+         'TensorrtExecutionProvider': 'NOT_AVAILABLE'}, require_gpu=True, require_tensorrt=False)
+    assert ok is False and reason
+
+def test_require_gpu_by_status_fails_when_cuda_only_session_registered_not_execution_verified():
+    # Session registration alone (no per-node execution proof) must NOT satisfy --require-gpu.
+    ok, reason = jc.check_gpu_requirement_by_status(
+        {'CPUExecutionProvider': 'EXECUTION_VERIFIED', 'CUDAExecutionProvider': 'SESSION_REGISTERED',
+         'TensorrtExecutionProvider': 'NOT_AVAILABLE'}, require_gpu=True, require_tensorrt=False)
+    assert ok is False and reason
+
+def test_require_gpu_by_status_succeeds_with_verified_cuda():
+    ok, reason = jc.check_gpu_requirement_by_status(
+        {'CPUExecutionProvider': 'FALLBACK', 'CUDAExecutionProvider': 'EXECUTION_VERIFIED',
+         'TensorrtExecutionProvider': 'NOT_AVAILABLE'}, require_gpu=True, require_tensorrt=False)
+    assert ok is True and reason is None
+
+def test_require_gpu_by_status_succeeds_with_verified_tensorrt():
+    ok, reason = jc.check_gpu_requirement_by_status(
+        {'CPUExecutionProvider': 'FALLBACK', 'CUDAExecutionProvider': 'FALLBACK',
+         'TensorrtExecutionProvider': 'EXECUTION_VERIFIED'}, require_gpu=True, require_tensorrt=False)
+    assert ok is True and reason is None
+
+def test_require_tensorrt_by_status_fails_with_cuda_only_execution_verified():
+    # A CUDA-only fallback must never satisfy --require-tensorrt, however verified CUDA's own status is.
+    ok, reason = jc.check_gpu_requirement_by_status(
+        {'CPUExecutionProvider': 'FALLBACK', 'CUDAExecutionProvider': 'EXECUTION_VERIFIED',
+         'TensorrtExecutionProvider': 'FALLBACK'}, require_gpu=True, require_tensorrt=True)
+    assert ok is False and 'TensorrtExecutionProvider' in reason
+
+def test_require_tensorrt_by_status_succeeds_with_verified_tensorrt():
+    ok, reason = jc.check_gpu_requirement_by_status(
+        {'CPUExecutionProvider': 'FALLBACK', 'CUDAExecutionProvider': 'FALLBACK',
+         'TensorrtExecutionProvider': 'EXECUTION_VERIFIED'}, require_gpu=True, require_tensorrt=True)
+    assert ok is True and reason is None
+
+def test_no_requirement_by_status_always_passes():
+    ok, reason = jc.check_gpu_requirement_by_status({'CPUExecutionProvider': 'EXECUTION_VERIFIED'},
+                                                      require_gpu=False, require_tensorrt=False)
+    assert ok is True and reason is None
+
+
+# --- Unified verification status ladder -----------------------------------------------------------
+
+def test_status_not_available_when_missing_from_available_providers():
+    s = jc.classify_provider_status('CUDAExecutionProvider', available_providers=['CPUExecutionProvider'])
+    assert s == 'NOT_AVAILABLE'
+
+def test_status_available_when_no_session_built_yet():
+    s = jc.classify_provider_status('CUDAExecutionProvider', available_providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+    assert s == 'AVAILABLE'
+
+def test_status_fallback_when_session_used_something_else():
+    s = jc.classify_provider_status('TensorrtExecutionProvider',
+                                     available_providers=['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider'],
+                                     session_providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+    assert s == 'FALLBACK'
+
+def test_status_session_registered_when_inference_not_yet_attempted_or_failed():
+    s = jc.classify_provider_status('CUDAExecutionProvider', available_providers=['CUDAExecutionProvider'],
+                                     session_providers=['CUDAExecutionProvider'], inference_ok=None)
+    assert s == 'SESSION_REGISTERED'
+    s2 = jc.classify_provider_status('CUDAExecutionProvider', available_providers=['CUDAExecutionProvider'],
+                                      session_providers=['CUDAExecutionProvider'], inference_ok=False)
+    assert s2 == 'SESSION_REGISTERED'
+
+def test_status_inference_passed_without_node_level_evidence():
+    s = jc.classify_provider_status('CUDAExecutionProvider', available_providers=['CUDAExecutionProvider'],
+                                     session_providers=['CUDAExecutionProvider'], inference_ok=True, nodes_executed=None)
+    assert s == 'INFERENCE_PASSED'
+
+def test_status_execution_verified_requires_positive_node_count():
+    s = jc.classify_provider_status('CUDAExecutionProvider', available_providers=['CUDAExecutionProvider'],
+                                     session_providers=['CUDAExecutionProvider'], inference_ok=True, nodes_executed=4)
+    assert s == 'EXECUTION_VERIFIED'
+    s0 = jc.classify_provider_status('CUDAExecutionProvider', available_providers=['CUDAExecutionProvider'],
+                                      session_providers=['CUDAExecutionProvider'], inference_ok=True, nodes_executed=0)
+    assert s0 == 'INFERENCE_PASSED'  # zero nodes attributed -- never claim execution was verified
+
+
+def test_count_nodes_by_provider_parses_node_category_events(tmp_path):
+    trace = [
+        {'cat': 'Node', 'name': 'MatMul_kernel_time', 'args': {'provider': 'CUDAExecutionProvider'}},
+        {'cat': 'Node', 'name': 'Relu_kernel_time', 'args': {'provider': 'CUDAExecutionProvider'}},
+        {'cat': 'Node', 'name': 'Add_kernel_time', 'args': {'provider': 'CPUExecutionProvider'}},
+        {'cat': 'Session', 'name': 'model_run', 'args': {}},  # not a Node event -- excluded
+    ]
+    path = tmp_path / 'profile.json'
+    path.write_text(json.dumps(trace))
+    counts = jc.count_nodes_by_provider(str(path))
+    assert counts == {'CUDAExecutionProvider': 2, 'CPUExecutionProvider': 1}
+
+def test_count_nodes_by_provider_returns_empty_on_missing_or_unparseable_file():
+    assert jc.count_nodes_by_provider('/nonexistent/path.json') == {}
+
+
+# --- Dependency policy: never both onnxruntime and onnxruntime-gpu; profile-gated candidates ----
 
 def test_install_jetson_ort_refuses_off_aarch64():
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
     import install_jetson_ort as ijo
-    detected = {'arch': 'x86_64', 'jetpack_family': 'jetpack6', 'cuda_major': 12, 'python_abi': 'cp312'}
-    candidate = ijo.find_candidate(detected, [
-        {'id': 'x', 'jetpack_family': 'jetpack6', 'cuda_major': 12, 'python_abi': 'cp312', 'arch': 'x86_64', 'install_method': 'package_name', 'package_name': 'onnxruntime-gpu'}
-    ])
-    # A candidate CAN exist for x86_64 in theory -- the refusal is enforced by main()'s explicit
-    # arch check, not by find_candidate() itself (which only matches fields), so this documents
-    # that separation rather than re-testing main()'s CLI flow here.
-    assert candidate is not None  # matching succeeds...
+    detected = {'arch': 'x86_64', 'l4t_major': 36, 'cuda_major': 12, 'cuda_minor': 6, 'cudnn_major': 9,
+                'tensorrt_major': 10, 'tensorrt_minor': 3, 'python_abi': 'cp312'}
+    # A profile+candidate CAN exist for x86_64 in theory -- the refusal is enforced by main()'s
+    # explicit arch check, not by the profile/candidate matching itself, so this documents that
+    # separation rather than re-testing main()'s CLI flow here.
+    profile = dict(detected, id='x', verified=True, ort_candidate_id='cand-x')
+    assert jc.profile_matches(detected, profile) is True
     assert detected['arch'] != 'aarch64'  # ...but main() refuses to install on this arch regardless
 
-def test_install_jetson_ort_no_candidate_for_unconfigured_environment():
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-    import install_jetson_ort as ijo
-    detected = {'arch': 'aarch64', 'jetpack_family': 'jetpack7', 'cuda_major': 13, 'python_abi': 'cp312'}
-    candidates = ijo.load_candidates()  # the real shipped file -- ships with zero real candidates
-    assert ijo.find_candidate(detected, candidates) is None
+def test_install_jetson_ort_no_verified_profile_for_unconfigured_environment():
+    detected = {'arch': 'aarch64', 'l4t_major': 39, 'cuda_major': 13, 'cuda_minor': 0, 'cudnn_major': 9,
+                'tensorrt_major': 10, 'tensorrt_minor': 5, 'python_abi': 'cp312'}
+    profiles = jc.load_profiles()  # the real shipped file -- ships with zero verified profiles
+    assert jc.find_matching_verified_profile(detected, profiles) is None
 
 def test_shipped_ort_candidates_file_has_no_real_entries():
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-    import install_jetson_ort as ijo
-    candidates = ijo.load_candidates()
+    candidates = jc.load_ort_candidates()
     assert all(c.get('install_method') is None for c in candidates), \
         'no candidate should be pre-filled with a guessed install method/wheel'
+
+def test_shipped_profiles_have_no_resolvable_ort_candidate():
+    profiles = jc.load_profiles()
+    candidates = jc.load_ort_candidates()
+    for profile in profiles:
+        assert jc.resolve_ort_candidate_for_profile(profile, candidates) is None
+
+def test_resolve_ort_candidate_requires_verified_profile_link():
+    candidates = [{'id': 'cand-1', 'install_method': 'package_name', 'package_name': 'onnxruntime-gpu'}]
+    linked_profile = {'id': 'p1', 'verified': True, 'ort_candidate_id': 'cand-1'}
+    assert jc.resolve_ort_candidate_for_profile(linked_profile, candidates) == candidates[0]
+    unlinked_profile = {'id': 'p2', 'verified': True, 'ort_candidate_id': None}
+    assert jc.resolve_ort_candidate_for_profile(unlinked_profile, candidates) is None
+    wrong_link_profile = {'id': 'p3', 'verified': True, 'ort_candidate_id': 'does-not-exist'}
+    assert jc.resolve_ort_candidate_for_profile(wrong_link_profile, candidates) is None
+    assert jc.resolve_ort_candidate_for_profile(None, candidates) is None
+
+
+# --- Target venv Python ABI (not the installer's own interpreter) --------------------------------
+
+def test_python_abi_of_queries_the_given_interpreter_not_this_one():
+    import sys as _sys
+    this_abi = jc.python_abi_tag()
+    queried_abi = jc.python_abi_of(_sys.executable)
+    assert queried_abi == this_abi  # sanity: querying THIS interpreter matches its own tag
+    # A different interpreter must be queried independently, not assumed to share this one's ABI --
+    # exercised here by pointing at a nonexistent path and confirming it's reported as undetermined
+    # rather than silently falling back to this process's own ABI.
+    assert jc.python_abi_of('/nonexistent/python3') is None
 
 
 # --- Report hygiene: no secret-shaped data ever included -----------------------------------------

@@ -38,6 +38,7 @@ REBUILD_FRONTEND=false
 INSTALL_SERVICE=false
 ALLOW_OTHER_ORIN=false
 PERFORMANCE_MODE=false
+PYTHON_OVERRIDE=""
 
 usage() {
   cat <<'EOF'
@@ -59,6 +60,11 @@ Usage: bash scripts/deploy_jetson_agx.sh [options]
   --performance-mode      Read AND record the current nvpmodel power mode around the benchmark
                           (never changes it without this flag, and even then only records, per the
                           "print/read-only unless explicitly asked" policy -- see docs).
+  --python /path/to/python   Use this specific interpreter to create .venv-jetson instead of the
+                          system default `python3`. Never auto-picks "the newest available python3.x"
+                          -- on a real JetPack/Ubuntu image, plain `python3` IS the supported default;
+                          silently preferring a newer python3.1x that happens to also be installed can
+                          select an ABI NVIDIA's own GPU ONNX Runtime wheels were never built for.
   -h, --help              This message.
 EOF
 }
@@ -77,6 +83,7 @@ while [[ $# -gt 0 ]]; do
     --install-service) INSTALL_SERVICE=true; shift ;;
     --allow-other-orin) ALLOW_OTHER_ORIN=true; shift ;;
     --performance-mode) PERFORMANCE_MODE=true; shift ;;
+    --python) PYTHON_OVERRIDE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
@@ -93,7 +100,7 @@ REPORT_DIR="$RUNTIME_DIR/reports"
 BENCH_DIR="$RUNTIME_DIR/benchmarks/$TS"
 mkdir -p "$RUNTIME_DIR" "$REPORT_DIR" "$BENCH_DIR"
 
-echo "== Step 1-4/17: Hardware + JetPack/L4T + NVIDIA stack detection =="
+echo "== Step 1-4/20: Hardware + JetPack/L4T + NVIDIA stack detection =="
 ALLOW_FLAG=""
 if [ "$ALLOW_OTHER_ORIN" = true ]; then ALLOW_FLAG="--allow-other-orin"; fi
 DETECT_JSON_PATH="$RUNTIME_DIR/jetson_environment.json"
@@ -106,25 +113,31 @@ if [ "$IS_TARGET" != "True" ]; then
   echo "This deployment target is not Jetson AGX Orin (pass --allow-other-orin to also accept Orin NX/Nano for testing)."
 fi
 
-echo "== Step 5/17: Python environment (.venv-jetson, never mixed with .venv) =="
-# Prefer the newest python3.x actually present rather than whatever bare `python3` happens to
-# resolve to -- this repo's pinned dependency versions (backend/requirements-core.txt) need a
-# reasonably current interpreter, and a system default `python3` can be older than that even when
-# a newer one is installed alongside it. On a real JetPack image, whichever python3.x ships there
-# is what gets used; this never installs a new Python version itself.
-PYTHON_BIN=""
-for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
-  if command -v "$candidate" >/dev/null 2>&1; then PYTHON_BIN="$candidate"; break; fi
-done
-if [ -z "$PYTHON_BIN" ]; then echo "No python3 interpreter found on this system."; exit 1; fi
+echo "== Step 5/20: Python environment (.venv-jetson, never mixed with .venv) =="
+# Default to the system's own `python3` (command -v python3) -- the JetPack/Ubuntu-provided
+# default -- never "the newest python3.x that happens to also be installed". A verified deployment
+# profile's python_abi was confirmed against THAT default interpreter; silently preferring a newer
+# one changes the ABI a GPU ONNX Runtime candidate is selected for, away from what was verified. Use
+# --python /path/to/python to explicitly target a different interpreter (e.g. a non-default python3.x
+# actually intended for this deployment) -- this script never guesses that choice on its own.
+if [ -n "$PYTHON_OVERRIDE" ]; then
+  if ! command -v "$PYTHON_OVERRIDE" >/dev/null 2>&1 && [ ! -x "$PYTHON_OVERRIDE" ]; then
+    echo "--python $PYTHON_OVERRIDE is not an executable interpreter."; exit 1
+  fi
+  PYTHON_BIN="$PYTHON_OVERRIDE"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+else
+  echo "No python3 interpreter found on this system (pass --python /path/to/python to specify one)."; exit 1
+fi
 echo "Using $PYTHON_BIN ($("$PYTHON_BIN" --version 2>&1)) to create $VENV_DIR"
 if [ ! -d "$VENV_DIR" ]; then "$PYTHON_BIN" -m venv "$VENV_DIR"; fi
 "$PY" -m pip install -q --upgrade pip
 
-echo "== Step 6/17: Core dependency installation (no ONNX Runtime yet) =="
+echo "== Step 6/20: Core dependency installation (no ONNX Runtime yet) =="
 "$PY" -m pip install -q -r backend/requirements-core.txt
 
-echo "== Step 7/17: ONNX Runtime installation matching the detected environment =="
+echo "== Step 7/20: ONNX Runtime installation matching the detected environment =="
 EFFECTIVE_PROVIDER="cpu"
 GPU_INSTALL_STATUS="not_attempted"
 if [ "$PROVIDER" = "cpu" ]; then
@@ -185,7 +198,7 @@ else
 fi
 echo "requested SYNEX_PROVIDER=$EFFECTIVE_PROVIDER (auto lets RiskEngine cascade tensorrt->cuda->cpu)"
 
-echo "== Step 8-9/17: Provider + real inference verification (no server needed yet) =="
+echo "== Step 8-9/20: Provider + real inference + profiling-based node execution verification (no server needed yet) =="
 "$PY" -m pip install -q httpx==0.28.1
 # stdout (the JSON report) and stderr (the human-readable summary/notes) are captured separately --
 # merging them would produce a file that's neither valid JSON nor readable text.
@@ -194,7 +207,23 @@ echo "== Step 8-9/17: Provider + real inference verification (no server needed y
 cat "$RUNTIME_DIR/verify_report.stderr.log" >&2
 cat "$RUNTIME_DIR/verify_report.json"
 
-echo "== Step 10/17: frontend/dist verification =="
+echo "== Step 10/20: CPU/GPU result equivalence check (SYN-001..005) =="
+# A GPU deployment is never reported as successful if its actual numeric/classification output
+# diverges from the CPU baseline beyond the tolerance compare_cpu_gpu_results.py defines -- this is
+# never skipped just because it might fail; failing HERE means the GPU deployment itself failed, not
+# that this check was optional.
+set +e
+"$PY" scripts/compare_cpu_gpu_results.py > "$RUNTIME_DIR/cpu_gpu_comparison.json" 2>"$RUNTIME_DIR/cpu_gpu_comparison.stderr.log"
+COMPARISON_RC=$?
+set -e
+cat "$RUNTIME_DIR/cpu_gpu_comparison.stderr.log" >&2
+cat "$RUNTIME_DIR/cpu_gpu_comparison.json"
+if [ "$COMPARISON_RC" != "0" ]; then
+  echo "CPU/GPU result equivalence FAILED for a provider that was actually used -- this deployment is NOT successful (see $RUNTIME_DIR/cpu_gpu_comparison.json)."
+  exit 5
+fi
+
+echo "== Step 11/20: frontend/dist verification =="
 if [ "$REBUILD_FRONTEND" = true ]; then
   if command -v npm >/dev/null 2>&1; then
     echo "--rebuild-frontend passed -- rebuilding frontend/dist."
@@ -208,7 +237,7 @@ else
   echo "WARNING: frontend/dist/index.html not found and --rebuild-frontend not passed -- the SPA will not be served."
 fi
 
-echo "== Step 11/17: Backend smoke tests =="
+echo "== Step 12/20: Backend smoke tests =="
 # Installed separately from requirements-dev.txt on purpose: that file pulls in requirements.txt,
 # which would reinstall the plain CPU onnxruntime and stomp whatever GPU build step 7 just set up.
 "$PY" -m pip install -q pytest==9.1.1 httpx==0.28.1 onnx==1.22.0
@@ -224,7 +253,7 @@ if [ "$PERFORMANCE_MODE" = true ]; then
   command -v nvpmodel >/dev/null 2>&1 && nvpmodel -q || echo "nvpmodel not present on this host"
 fi
 
-echo "== Step 12/17: Server startup =="
+echo "== Step 13/20: Server startup =="
 SYNEX_TENSORRT_FP16_VALUE="false"
 if [ "$FP16" = true ]; then
   echo "--fp16 passed -- validating FP16 vs FP32 before enabling it (see scripts/validate_fp16.py)."
@@ -250,35 +279,44 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-echo "== Step 13/17: GET /health =="
+echo "== Step 14/20: GET /health =="
 HEALTH=$(curl -sf "http://127.0.0.1:$PORT/health") || { echo "Health check failed"; exit 1; }
 echo "$HEALTH" | tee "$RUNTIME_DIR/health.json"
 
-echo "== Step 14/17: POST /predict =="
+echo "== Step 15/20: POST /predict =="
 PREDICT_BODY='{"drug_conflict":0.5,"comorbidity_load":0.4,"age_risk":0.5,"allergy_flag":0.0,"adverse_history":0,"polypharmacy_load":0.3,"therapy_duration_load":0.2}'
 PREDICT_RESULT=$(curl -sf -X POST "http://127.0.0.1:$PORT/predict" -H 'Content-Type: application/json' -d "$PREDICT_BODY") || { echo "/predict failed"; exit 1; }
 echo "$PREDICT_RESULT" | tee "$RUNTIME_DIR/predict.json"
 
-echo "== Step 15/17: POST /agent/analyze (SYN-002) =="
+echo "== Step 16/20: POST /agent/analyze (SYN-002) =="
 ANALYZE_RESULT=$(curl -sf -X POST "http://127.0.0.1:$PORT/agent/analyze" -H 'Content-Type: application/json' -d '{"patient_id":"SYN-002"}') || { echo "/agent/analyze failed"; exit 1; }
 echo "$ANALYZE_RESULT" > "$RUNTIME_DIR/agent_analyze.json"
 echo "(saved to $RUNTIME_DIR/agent_analyze.json)"
 
-echo "== --require-gpu / --require-tensorrt enforcement =="
-SESSION_PROVIDERS=$(echo "$HEALTH" | python3 -c "import json,sys;print(json.dumps(json.load(sys.stdin)['providers']))")
+echo "== Step 17/20: --require-gpu / --require-tensorrt enforcement =="
+# Gates on the ACTUAL per-node execution proof from step 8-9's profiled verification run
+# (verify_report.json's onnxruntime.provider_status), never on session provider REGISTRATION alone
+# -- "CUDAExecutionProvider" appearing in session.get_providers() is not, by itself, proof any node
+# ran on it (see jetson_common.classify_provider_status / count_nodes_by_provider). A CUDA-only
+# fallback (TensorRT EP unavailable/unused) never satisfies --require-tensorrt.
 GPU_CHECK_OK=$(python3 -c "
-import sys; sys.path.insert(0,'scripts')
-import jetson_common as jc, json
-ok, reason = jc.check_gpu_requirement(json.loads('$SESSION_PROVIDERS'), $( [ "$REQUIRE_GPU" = true ] && echo True || echo False ), $( [ "$REQUIRE_TENSORRT" = true ] && echo True || echo False ))
+import json, sys
+sys.path.insert(0, 'scripts')
+import jetson_common as jc
+report = json.load(open('$RUNTIME_DIR/verify_report.json'))
+status = report.get('onnxruntime', {}).get('provider_status', {})
+require_gpu, require_tensorrt = $( [ "$REQUIRE_GPU" = true ] && echo True || echo False ), $( [ "$REQUIRE_TENSORRT" = true ] && echo True || echo False )
+ok, reason = jc.check_gpu_requirement_by_status(status, require_gpu, require_tensorrt)
 print(ok)
-if not ok: print(reason, file=sys.stderr)
+if not ok:
+    print(reason, file=sys.stderr)
 ")
 if [ "$GPU_CHECK_OK" != "True" ]; then
-  echo "REQUIREMENT NOT MET: --require-gpu/--require-tensorrt was set but the session did not use the required provider."
+  echo "REQUIREMENT NOT MET: --require-gpu/--require-tensorrt was set but real per-node GPU execution was not verified (see $RUNTIME_DIR/verify_report.json)."
   exit 4
 fi
 
-echo "== Step 16/17: Benchmark (with tegrastats background sampling) =="
+echo "== Step 18/20: Benchmark (with tegrastats background sampling) =="
 TEGRA_LOG="$BENCH_DIR/tegrastats.log"
 TEGRA_PID=""
 if command -v tegrastats >/dev/null 2>&1; then
@@ -289,7 +327,7 @@ fi
 if [ -n "$TEGRA_PID" ]; then kill "$TEGRA_PID" 2>/dev/null || true; fi
 cat "$BENCH_DIR/benchmark.json"
 
-echo "== Step 17/17: Deployment report =="
+echo "== Step 19/20: Deployment report =="
 python3 scripts/generate_jetson_report.py \
   --detect-json "$DETECT_JSON_PATH" \
   --verify-json "$RUNTIME_DIR/verify_report.json" \
@@ -301,6 +339,26 @@ python3 scripts/generate_jetson_report.py \
   --out-json "$REPORT_DIR/jetson-deployment-$TS.json" \
   --out-txt "$REPORT_DIR/jetson-deployment-$TS.txt"
 echo "Report written to $REPORT_DIR/jetson-deployment-$TS.{json,txt}"
+
+echo "== Step 20/20: Verified-profile capture (real hardware only) =="
+if [ "$IS_TARGET" = "True" ]; then
+  # Captures what THIS run actually observed into a NEW file for human review -- never auto-edits
+  # config/jetson_agx_orin_profiles.json itself. Only runs when this deployment happened on a
+  # detected AGX Orin (or, with --allow-other-orin, an accepted other-Orin target); on a non-Jetson
+  # host this step is skipped entirely rather than writing a capture that would misleadingly look
+  # like a hardware-observed record.
+  python3 scripts/capture_jetson_verified_profile.py \
+    --detect-json "$DETECT_JSON_PATH" \
+    --verify-json "$RUNTIME_DIR/verify_report.json" \
+    --health-json "$RUNTIME_DIR/health.json" \
+    --predict-json "$RUNTIME_DIR/predict.json" \
+    --agent-analyze-json "$RUNTIME_DIR/agent_analyze.json" \
+    --benchmark-json "$BENCH_DIR/benchmark.json" \
+    --out "$RUNTIME_DIR/jetson_verified_profile.json" >/dev/null
+  echo "Wrote $RUNTIME_DIR/jetson_verified_profile.json -- review by hand before promoting anything into config/jetson_agx_orin_profiles.json."
+else
+  echo "Skipped: this run was not on a detected Jetson AGX Orin (is_supported_target=$IS_TARGET) -- no verified-profile capture written."
+fi
 
 if [ "$INSTALL_SERVICE" = true ]; then
   echo "== systemd service template (written, NOT installed/enabled) =="
@@ -330,9 +388,19 @@ fi
 echo ""
 echo "DEPLOYMENT STATUS: $(python3 -c "
 import json
-h=json.load(open('$RUNTIME_DIR/health.json'))
-providers=h['providers']
-if 'TensorrtExecutionProvider' in providers: print('JETSON AGX ORIN TENSORRT DEPLOYMENT VERIFIED' if $IS_TARGET else 'TENSORRT PATH EXERCISED (NOT ON AGX ORIN HARDWARE)')
-elif 'CUDAExecutionProvider' in providers: print('JETSON AGX ORIN CUDA DEPLOYMENT VERIFIED' if $IS_TARGET else 'CUDA PATH EXERCISED (NOT ON AGX ORIN HARDWARE)')
-else: print('CPU SAFE MODE VERIFIED' if $IS_TARGET else 'CPU SAFE MODE (NOT RUN ON JETSON HARDWARE)')
+report = json.load(open('$RUNTIME_DIR/verify_report.json'))
+status = report.get('onnxruntime', {}).get('provider_status', {})
+is_target = $IS_TARGET
+# Never printed unless this run actually happened ON a detected AGX Orin (is_target) -- running
+# this script on a non-Jetson host (e.g. this development container) always reports the honest
+# 'NOT HARDWARE VERIFIED' status, whatever provider_status shows, per the explicit rule that a
+# CUDA/TensorRT VERIFIED claim is only ever made from a run that actually happened on real hardware.
+if not is_target:
+    print('JETSON DEPLOYMENT CODE PREPARED / NOT HARDWARE VERIFIED')
+elif status.get('TensorrtExecutionProvider') == 'EXECUTION_VERIFIED':
+    print('JETSON AGX ORIN TENSORRT EXECUTION VERIFIED')
+elif status.get('CUDAExecutionProvider') == 'EXECUTION_VERIFIED':
+    print('JETSON AGX ORIN CUDA EXECUTION VERIFIED')
+else:
+    print('JETSON AGX ORIN CPU VERIFIED')
 ")"

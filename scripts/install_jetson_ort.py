@@ -6,11 +6,16 @@ Hard rules this enforces:
   2. Never installs a generic x86/manylinux wheel on aarch64 -- refuses outright off that arch
      unless --dry-run (dry-run only prints what WOULD happen, for testing the selection logic on
      any machine, and never invokes pip).
-  3. Never guesses a wheel URL/version for a JetPack/CUDA/Python combination that isn't already an
-     explicit, filled-in entry in config/jetson_ort_candidates.json -- an unmatched environment is
-     reported as "no candidate configured" (exit code 2) and the caller (deploy_jetson_agx.sh)
-     falls back to CPU Safe Mode rather than guessing.
-  4. A successful pip install is NOT the finish line: this script re-imports onnxruntime in a
+  3. A GPU candidate is reached ONLY through an exact-matching VERIFIED deployment profile in
+     config/jetson_agx_orin_profiles.json -- never by matching environment fields against
+     config/jetson_ort_candidates.json directly. This is the real deploy gate: no verified profile
+     matches -> NO_VERIFIED_PROFILE; a matching verified profile with no resolvable
+     ort_candidate_id -> NO_VERIFIED_ORT_CANDIDATE. Either way, CPU Safe Mode follows, never a
+     guessed wheel.
+  4. Candidate/profile matching uses the ABI of the TARGET python (the venv this ONNX Runtime is
+     being installed into, queried via `--python`), never the ABI of whatever interpreter happens
+     to be running this installer script itself.
+  5. A successful pip install is NOT the finish line: this script re-imports onnxruntime in a
      fresh subprocess afterward and confirms the requested GPU provider actually appears in
      ort.get_available_providers() before reporting success.
 
@@ -25,32 +30,24 @@ import jetson_common as jc
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def load_candidates(path=None):
-    path = path or (ROOT / 'config' / 'jetson_ort_candidates.json')
-    return json.loads(path.read_text(encoding='utf-8'))['candidates']
-
-
-def find_candidate(detected, candidates):
-    for c in candidates:
-        if c.get('install_method') is None:
-            continue  # unfilled template entry -- never matches
-        fields = ('jetpack_family', 'cuda_major', 'python_abi', 'arch')
-        if all(detected.get(f) is not None and detected.get(f) == c.get(f) for f in fields):
-            return c
-    return None
-
-
-def detected_environment():
+def detected_environment(python_bin: str) -> dict:
+    """Builds the exact same field set jetson_common.PROFILE_MATCH_FIELDS compares -- using the
+    TARGET python's ABI (python_abi_of(python_bin)), not this script's own interpreter."""
     hw = jc.detect_hardware()
     l4t = jc.classify_l4t_family(jc.read_file('/etc/nv_tegra_release'))
     nvcc = jc.run(['nvcc', '--version'])
     cuda = jc.classify_cuda_family(jc.extract_cuda_version_from_nvcc(nvcc))
-    family = l4t['jetpack_family'] or cuda['jetpack_family']
+    cudnn_major = jc.extract_cudnn_major(jc.run(['bash', '-c', 'dpkg -l | grep -i cudnn || true']))
+    trt = jc.extract_tensorrt_version(jc.run(['bash', '-c', "dpkg -l | grep -E 'tensorrt|libnvinfer' || true"]))
     return {
         'arch': hw['machine_arch'],
-        'jetpack_family': family,
+        'l4t_major': l4t['l4t_major'],
         'cuda_major': cuda['cuda_major'],
-        'python_abi': jc.python_abi_tag(),
+        'cuda_minor': cuda['cuda_minor'],
+        'cudnn_major': cudnn_major,
+        'tensorrt_major': trt['tensorrt_major'],
+        'tensorrt_minor': trt['tensorrt_minor'],
+        'python_abi': jc.python_abi_of(python_bin),
     }
 
 
@@ -96,11 +93,12 @@ def verify_installed(python_bin):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--python', required=True, help='Path to the target venv python executable')
+    ap.add_argument('--profiles-file', default=None)
     ap.add_argument('--candidates-file', default=None)
     ap.add_argument('--dry-run', action='store_true', help='Print the plan without running pip or touching the environment')
     args = ap.parse_args()
 
-    detected = detected_environment()
+    detected = detected_environment(args.python)
     result = {'detected': detected}
 
     if detected['arch'] != 'aarch64' and not args.dry_run:
@@ -109,13 +107,29 @@ def main():
         print(json.dumps(result, indent=2))
         return 3
 
-    candidates = load_candidates(args.candidates_file)
-    candidate = find_candidate(detected, candidates)
+    profiles_path = Path(args.profiles_file) if args.profiles_file else None
+    candidates_path = Path(args.candidates_file) if args.candidates_file else None
+    profiles = jc.load_profiles(profiles_path)
+    matched_profile = jc.find_matching_verified_profile(detected, profiles)
+    if matched_profile is None:
+        result['status'] = 'NO_VERIFIED_PROFILE'
+        result['reason'] = ('No entry in config/jetson_agx_orin_profiles.json with verified=true exactly '
+                             'matches this environment (arch/l4t_major/cuda_major/cuda_minor/cudnn_major/'
+                             'tensorrt_major/tensorrt_minor/python_abi). A profile is only ever marked '
+                             'verified from a real successful run on real hardware -- falling back to CPU Safe Mode.')
+        print(json.dumps(result, indent=2))
+        return 2
+
+    result['matched_profile'] = matched_profile['id']
+    candidates = jc.load_ort_candidates(candidates_path)
+    candidate = jc.resolve_ort_candidate_for_profile(matched_profile, candidates)
     if candidate is None:
-        result['status'] = 'NO_CANDIDATE_CONFIGURED'
-        result['reason'] = ('No entry in config/jetson_ort_candidates.json matches this exact '
-                             'jetpack_family/cuda_major/python_abi/arch combination. Add a real, '
-                             'device-verified entry there rather than guessing -- falling back to CPU Safe Mode.')
+        result['status'] = 'NO_VERIFIED_ORT_CANDIDATE'
+        result['reason'] = (f"Profile {matched_profile['id']!r} matched this environment, but its "
+                             "ort_candidate_id does not resolve to a filled-in entry in "
+                             "config/jetson_ort_candidates.json. A verified profile proves the environment "
+                             "was confirmed on real hardware; it does not by itself supply a working ORT "
+                             "wheel -- falling back to CPU Safe Mode.")
         print(json.dumps(result, indent=2))
         return 2
 

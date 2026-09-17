@@ -39,5 +39,8 @@ echo "clean."
 
 tar -C "$STAGE" -czf "$OUT" SynexAgent
 echo "Wrote $OUT ($(du -h "$OUT" | cut -f1))"
-tar -tzf "$OUT" | head -20
+# `tar -tzf "$OUT" | head -20` under `set -euo pipefail` can exit 141 (SIGPIPE) when `head` closes
+# its read end after 20 lines while tar is still writing -- `sed -n` reads to EOF instead, so tar
+# always exits 0 on its own and the pipeline's exit status is never a pipe-closure artifact.
+tar -tzf "$OUT" | sed -n '1,20p'
 echo "... ($(tar -tzf "$OUT" | wc -l) entries total)"
