@@ -1,0 +1,12 @@
+SynexAgent Y-MAS RC1
+Frozen: 2026-09-17
+
+Scope of this Release Candidate: stabilization only (concurrency, security hardening, test
+coverage, docs/code consistency) on top of the already-implemented Clinical Workspace + SynexAgent
+feature set -- no new clinical features, no new LLM/AI service, no real hospital FHIR write-back,
+no fabricated Jetson AGX Orin hardware verification. See docs/EMR_INTEGRATION.md and
+docs/SECURITY.md for what is implemented vs. still needs real-environment verification.
+
+The exact commit this build corresponds to is whatever commit this file is checked into --
+`git log -1 -- VERSION` (or `git log -1`, since this file changes only at a release boundary)
+gives the authoritative hash; do not infer it from this file's contents.

@@ -47,6 +47,7 @@ refuses them unconditionally so a future endpoint has to consciously bypass this
 silently skip it.
 """
 import json, os, secrets, sqlite3, time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -132,8 +133,18 @@ class _AuthSessionStore:
             db.execute('CREATE TABLE IF NOT EXISTS auth_sessions (session_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, '
                        'role TEXT NOT NULL, created_at_ts REAL NOT NULL)')
 
+    @contextmanager
     def _connect(self):
-        return sqlite3.connect(self.path, timeout=15)
+        # See audit.AuditStore.connect()'s comment: a bare sqlite3.connect() used only via the
+        # connection's own with-block (commit/rollback, not close) leaks a file descriptor per
+        # call. This context-manager form keeps every call site's `with self._connect() as db:`
+        # unchanged while guaranteeing the connection actually closes afterward.
+        db = sqlite3.connect(self.path, timeout=15)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def put(self, session_id, *, user_id, role):
         with self._connect() as db:

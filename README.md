@@ -1,5 +1,11 @@
 # YMAS-GPT-6-Astra · SynexAgent
 
+**Release: SynexAgent Y-MAS RC1** (see `VERSION`) -- stabilization freeze of the Clinical Workspace
+feature set described below (Encounter/SOAP Note/Diagnosis/Medication+Lab Order/Timeline/Clinical
+Summary/SynexAgent/3D Anatomy/RBAC-OIDC/SMART on FHIR/CDS Hooks/Idempotency), not a new-feature
+release. What's real-environment-verified vs. still needs it is in `docs/EMR_INTEGRATION.md` and
+`docs/SECURITY.md`.
+
 기존 v3 ONNX 모델을 실제로 실행하는 **가상 환자 기반 Clinical Copilot MVP**입니다. 환자를 선택하면 규칙·모델·검사 변화 분석을 보여주며, 약물을 가상으로 추가하여 점수와 경고의 전후 변화를 비교할 수 있습니다.
 
 **데모 전용입니다. 실제 진단·처방 시스템이 아니며, 처방을 자동 확정하지 않습니다.** 화면의 백분율은 합성·규칙 라벨을 학습한 모델 점수이며 실제 부작용 발생 확률이 아닙니다. 제공된 약물 규칙도 임상 검증된 지식베이스로 간주하지 않습니다.

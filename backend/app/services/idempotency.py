@@ -26,6 +26,7 @@ a real multi-worker/multi-process-safe backend using Redis's atomic `SET NX`. Bo
 implement the identical begin()/complete()/fail() interface.
 """
 import json, os, sqlite3, time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,8 +69,17 @@ class _SqliteIdempotencyStore:
                        'status TEXT NOT NULL, response_status INTEGER, response_body TEXT, '
                        'created_at_ts REAL NOT NULL, PRIMARY KEY (scope, key))')
 
+    @contextmanager
     def _connect(self):
-        return sqlite3.connect(self.path, timeout=15)
+        # See audit.AuditStore.connect()'s comment: guarantees the connection closes after every
+        # call, not just eventually via garbage collection -- important here in particular since
+        # _wait_for_result() can loop many times (up to WAIT_TIMEOUT_SECONDS) polling this method.
+        db = sqlite3.connect(self.path, timeout=15)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def _try_insert(self, scope, key, request_hash) -> bool:
         try:

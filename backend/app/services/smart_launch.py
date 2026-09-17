@@ -23,6 +23,7 @@ State is kept in one of two backends, chosen at import time:
   visible to whichever worker handles the callback.
 """
 import base64, contextvars, hashlib, ipaddress, json, os, secrets, socket, sqlite3, time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
@@ -63,8 +64,16 @@ class _LaunchStore:
                        'iss TEXT NOT NULL, launch TEXT NOT NULL, redirect_uri TEXT NOT NULL, '
                        'token_endpoint TEXT NOT NULL, created_at_ts REAL NOT NULL)')
 
+    @contextmanager
     def _connect(self):
-        return sqlite3.connect(self.path, timeout=15)
+        # See audit.AuditStore.connect()'s comment: guarantees the connection actually closes
+        # after each call instead of leaking a file descriptor until garbage collection catches up.
+        db = sqlite3.connect(self.path, timeout=15)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def put(self, state, data):
         with self._connect() as db:
@@ -299,8 +308,16 @@ class _SessionStore:
             db.execute('CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, '
                        'iss TEXT NOT NULL, access_token TEXT NOT NULL, created_at_ts REAL NOT NULL)')
 
+    @contextmanager
     def _connect(self):
-        return sqlite3.connect(self.path, timeout=15)
+        # See audit.AuditStore.connect()'s comment: guarantees the connection actually closes
+        # after each call instead of leaking a file descriptor until garbage collection catches up.
+        db = sqlite3.connect(self.path, timeout=15)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def put(self, session_id, *, patient_id, iss, access_token):
         with self._connect() as db:

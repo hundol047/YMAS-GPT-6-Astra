@@ -8,17 +8,49 @@ from ..schemas import RiskFeatures
 
 FEATURES = ['drug_conflict','comorbidity_load','age_risk','allergy_flag','adverse_history','polypharmacy_load','therapy_duration_load']
 MODEL_PATH = Path(__file__).resolve().parents[2] / 'models' / 'risk_model_deep_v3.onnx'
+# The only three values SYNEX_PROVIDER understands. An unrecognized value (a typo like 'gpu' or
+# 'nvidia', or anything else) is NOT silently treated as 'cpu' with no trace -- that would hide a
+# real deployment misconfiguration (someone requested acceleration and got neither the accelerator
+# nor a warning). It falls back to CPU, same as an unavailable accelerator, but logs a warning and
+# sets fallback_reason so /health surfaces it -- consistent with how every other
+# requested-but-unavailable-provider case in this class is already reported, rather than raising
+# and refusing to start the whole app over an env var typo.
+VALID_PROVIDERS = ('cpu', 'cuda', 'tensorrt')
+
+
+def select_providers(requested: str, available: list) -> tuple:
+    """Pure provider-selection logic, pulled out of RiskEngine.__init__ so it's unit-testable
+    against a MOCKED available-providers list without needing real CUDA/TensorRT hardware or an
+    actual ONNX session -- see test_risk_inference.py. Returns (providers_list, fallback_reason).
+
+    requested is expected already-lowercased; an unrecognized value falls back to 'cpu' with a
+    fallback_reason set (never silently treated as a plain, unremarked 'cpu' -- see VALID_PROVIDERS'
+    comment above for why: a typo like SYNEX_PROVIDER=gpu should be visible in /health, not just
+    quietly behave like SYNEX_PROVIDER=cpu)."""
+    fallback_reason = None
+    if requested not in VALID_PROVIDERS:
+        logging.warning('Unsupported SYNEX_PROVIDER=%r (valid: %s); falling back to cpu', requested, ', '.join(VALID_PROVIDERS))
+        fallback_reason = f"Unsupported SYNEX_PROVIDER={requested!r} (valid: {', '.join(VALID_PROVIDERS)}); using CPU"
+        requested = 'cpu'
+    if requested == 'cpu':
+        return ['CPUExecutionProvider'], fallback_reason
+    if requested == 'cuda':
+        providers = [p for p in ['CUDAExecutionProvider','CPUExecutionProvider'] if p in available]
+        if 'CUDAExecutionProvider' not in providers:
+            fallback_reason = 'CUDA provider unavailable; using CPU fallback'
+        return providers, fallback_reason
+    # requested == 'tensorrt'
+    providers = [p for p in ['TensorrtExecutionProvider','CUDAExecutionProvider','CPUExecutionProvider'] if p in available]
+    if 'TensorrtExecutionProvider' not in providers:
+        fallback_reason = 'TensorRT provider unavailable; using CPU/CUDA fallback'
+    return providers, fallback_reason
+
 
 class RiskEngine:
     def __init__(self):
         requested = os.getenv('SYNEX_PROVIDER','cpu').lower()
         available = ort.get_available_providers()
-        providers = ['CPUExecutionProvider']
-        self.fallback_reason = None
-        if requested == 'tensorrt':
-            providers = [p for p in ['TensorrtExecutionProvider','CUDAExecutionProvider','CPUExecutionProvider'] if p in available]
-            if 'TensorrtExecutionProvider' not in providers:
-                self.fallback_reason = 'TensorRT provider unavailable; using CPU/CUDA fallback'
+        providers, self.fallback_reason = select_providers(requested, available)
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = 1
         opts.inter_op_num_threads = 1
