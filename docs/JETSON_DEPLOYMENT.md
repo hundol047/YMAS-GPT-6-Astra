@@ -1,47 +1,196 @@
-# Jetson Orin 배포 경로
+# Jetson AGX Orin Deployment
 
-## 새로 추가된 도구 (AGX Orin 확정 이후)
+This document describes the actual Jetson deployment tooling in this repository as of the
+current code -- not an aspiration. **Nothing in this document has been exercised on real Jetson
+AGX Orin hardware from this development environment** (confirmed via `scripts/detect_jetson_env.py`:
+this is x86_64 cloud Linux, no `/proc/device-tree/model`, no L4T, no CUDA toolchain, no NVIDIA
+GPU). Every script below runs correctly here and takes the CPU Safe Mode path honestly -- that is
+the one thing actually verified from this environment. Run it on a real device before trusting any
+GPU-related claim.
 
-- `scripts/verify_jetson_agx_gpu.py`: 명세된 감지 명령(`/proc/device-tree/model`, `nv_tegra_release`, `nvidia-l4t-core`, CUDA/cuDNN/TensorRT 패키지, Docker)을 그대로 실행하고, 실제 ONNX 모델로 추론까지 수행한 뒤 `TensorrtExecutionProvider`/`CUDAExecutionProvider`가 `available_providers` **와** `session_providers` 양쪽에 모두 있고 추론이 성공했을 때만 "GPU ACCELERATION VERIFIED"를 출력합니다. 이 저장소의 개발 컨테이너는 x86_64라 항상 `hardware_is_agx_orin: false` + CPU SAFE MODE로 나옵니다 — 실제 장치에서 실행해야 의미 있는 값이 나옵니다.
-- `config/jetson_agx_orin_profiles.json`: JetPack/L4T/CUDA/cuDNN/TensorRT/Docker 베이스 이미지 조합별 배포 프로파일. 이번 작업에서는 `verified:true`인 프로파일을 하나도 채우지 않았습니다 — 실제 장치에서 `verify_jetson_agx_gpu.py`를 실행한 결과로만 채워야 합니다.
-- `scripts/deploy_jetson_agx.sh`: 감지 → 프로파일 매칭(미검증 조합이면 무조건 CPU Safe Mode) → (가능하면) Docker 빌드 → 서버 기동 → `/health` 확인 → provider 검증 → 상태 출력까지 한 번에 수행합니다. 이 개발 컨테이너에서 실행하면 CPU Safe Mode 경로가 끝까지 성공하는 것을 확인했습니다; GPU 빌드 경로는 실제 AGX Orin이 아니면 도달하지 않습니다.
-- `scripts/benchmark_jetson.py`: warmup/short/sustained 3단계로 실제 지연시간(avg/p50/p95/min/max)과 처리량을 측정합니다. 이 호스트에는 CUDA/TensorRT가 없으므로 해당 provider는 `available:false`로만 표시되고 숫자를 채우지 않습니다 — 가짜 벤치마크 수치를 생성하지 않습니다. `tegrastats`/`nvpmodel`은 실제 Jetson에서만 값이 채워집니다.
-
-## 현재 검증 범위
-
-일반 Linux x86_64의 ONNX Runtime CPU에서 모델 로드와 API 테스트를 수행했습니다. Jetson 하드웨어·TensorRT 엔진 성능·MONAI/Clara 배포는 검증하지 않았습니다. 이 모델은 구조화 데이터 MLP이며 영상 전처리 프레임워크가 필요하지 않아 MONAI를 실행 의존성에 추가하지 않았습니다.
-
-## CPU 실행부터 확인
-
-1. Jetson의 JetPack, CUDA, TensorRT, Python 및 aarch64 환경을 확인합니다.
-2. 해당 환경에 맞는 ONNX Runtime을 설치합니다. PC용 x86_64 wheel이나 일반 최신 GPU wheel을 무조건 설치하지 마십시오.
-3. `backend/requirements.txt`의 FastAPI/NumPy/Pydantic/Uvicorn 요구사항을 환경에 맞게 설치합니다. 이미 호환 ORT를 설치했다면 requirements의 ORT 고정버전을 다시 덮어쓰지 마십시오.
-4. 프로젝트 루트에서 `python scripts/check_runtime.py`로 실제 모델과 provider를 확인합니다.
-5. 프론트엔드 `npm ci`, `npm run build` 후 `python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000`을 실행합니다.
-
-## TensorRT provider 선택
-
-호환하는 ORT TensorRT 빌드가 설치된 Jetson에서:
+## Quick Deploy
 
 ```bash
-export SYNEX_PROVIDER=tensorrt
-python scripts/check_runtime.py
-python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+bash scripts/deploy_jetson_agx.sh --auto
 ```
 
-서버는 사용 가능한 `TensorrtExecutionProvider → CUDAExecutionProvider → CPUExecutionProvider` 순서로 설정합니다. 가속 provider를 사용할 수 없거나 초기화가 실패하면 CPU fallback 사유가 `/health`에 나타납니다. 모델 자체가 손상되었으면 가짜 값으로 실행하지 않고 시작에 실패합니다. provider 목록에 TensorRT가 있는 것만으로 모든 노드가 GPU에 배치됐다고 주장할 수 없습니다.
+Runs the full flow end to end: hardware detection → JetPack/L4T/CUDA/cuDNN/TensorRT detection →
+Python venv (`.venv-jetson/`, never mixed with the plain-PC `.venv/`) → core dependency install →
+ONNX Runtime install matched to the detected environment (or CPU fallback) → provider + real
+inference verification → frontend/dist check → backend smoke tests → server startup → `/health` →
+`/predict` → `/agent/analyze` → benchmark (with `tegrastats` sampling when available) →
+`runtime/reports/jetson-deployment-<timestamp>.{json,txt}`.
 
-별도 TensorRT 엔진을 만들 경우 원본 ONNX를 보존하십시오. 대상 장치의 TensorRT `trtexec --help`로 플래그를 확인한 뒤, 해당 버전에서 지원하는 경우 다음 형태를 사용합니다:
+On hardware that isn't Jetson AGX Orin (or where no verified deployment profile matches), this
+takes the CPU Safe Mode path and reports so honestly -- it never installs a guessed GPU wheel.
+
+## Y-MAS GPU-required Deploy
 
 ```bash
-trtexec --onnx=backend/models/risk_model_deep_v3.onnx --saveEngine=risk_model_deep_v3.engine --minShapes=features:1x7 --optShapes=features:1x7 --maxShapes=features:32x7
+bash scripts/deploy_jetson_agx.sh --auto --require-gpu
+# or, to specifically require TensorRT:
+bash scripts/deploy_jetson_agx.sh --auto --require-tensorrt
 ```
 
-`.engine`은 현재 FastAPI가 직접 읽는 파일이 아닙니다. 현재 가속 경로는 ONNX Runtime TensorRT provider가 관리하는 실행입니다. FP16/INT8 적용 전후에는 경계값·위험도 분류·반복성·지연시간을 CPU 기준과 비교해야 합니다. 이번 작업에서는 엔진 생성이나 속도 개선을 수행했다고 주장하지 않습니다.
+Fails (non-zero exit, no silent CPU-mode "success") unless the running server's session actually
+used `CUDAExecutionProvider` (`--require-gpu`) or specifically `TensorrtExecutionProvider`
+(`--require-tensorrt`). Confirmed in this environment: `--require-gpu` here exits 4 with
+`"A GPU execution provider was required but the session used CPU only"` -- exactly the intended
+behavior on non-GPU hardware.
 
-## 공식 자료
+## Other flags
 
-- [ONNX Runtime TensorRT provider 설치·JetPack 링크 및 호환 표](https://onnxruntime.ai/docs/execution-providers/TensorRT-ExecutionProvider.html): provider를 명시적으로 등록하고 비지원 노드를 위한 CUDA provider를 함께 설정하는 방식을 참고했습니다. 확인일 2026-09-11.
-- [NVIDIA Jetson용 PyTorch 설치](https://docs.nvidia.com/deeplearning/frameworks/install-pytorch-jetson-platform/index.html): 향후 장치 내 재학습/영상 AI가 필요할 때 JetPack에 맞는 패키지 선택을 위한 자료입니다. 현재 ONNX 추론에는 PyTorch가 필요하지 않습니다.
+| Flag | Effect |
+|---|---|
+| `--provider auto\|cpu\|cuda\|tensorrt` | Force a specific `SYNEX_PROVIDER` instead of letting `auto` request `tensorrt` and let `RiskEngine`'s own cascade (tensorrt→cuda→cpu) pick what's actually available. |
+| `--port`, `--host` | Server bind address (default `127.0.0.1:8000`; use `--host 0.0.0.0` to expose on the LAN). |
+| `--fp16` | Enable TensorRT FP16 -- but ONLY after `scripts/validate_fp16.py` passes (see below); otherwise FP32 is kept and this is logged. |
+| `--build-ort-tensorrt` | Allow an optional ONNX Runtime TensorRT-EP source build (`scripts/build_ort_tensorrt.sh`) when no pre-built wheel candidate is configured. Checks real prerequisites (cmake/git/gcc/CUDA/cuDNN/TensorRT headers, disk, memory) and refuses to start the build if any are missing. |
+| `--rebuild-frontend` | Rebuild `frontend/dist` with `npm ci && npm run build` instead of using the tracked build as-is (the default -- Jetson deployment needs no Node.js at all unless this is passed). |
+| `--install-service` | Writes (never installs/enables) a `systemd` unit template to `runtime/synexagent.service` for manual review and installation. |
+| `--allow-other-orin` | Also accept Jetson Orin NX/Nano as a valid target for testing (default target is AGX Orin specifically -- a naive `'orin' in model` string check would misclassify NX/Nano as AGX Orin, which this repo's `scripts/jetson_common.py::classify_orin_family()` fixes). |
+| `--performance-mode` | Reads (never changes) the current `nvpmodel` power mode around the benchmark. Power mode is never changed automatically, with or without this flag. |
 
-MONAI/Clara의 특정 최신 릴리스나 Orin 호환성이 검증되었다고 주장하지 않습니다. 향후 영상 모델은 별도 service/interface로 연결하고 현재 7-feature 계약과 분리하십시오.
+## Diagnostic tools (usable standalone, without deploying anything)
+
+```bash
+python3 scripts/detect_jetson_env.py            # hardware/JetPack/L4T/CUDA/cuDNN/TensorRT/tools --
+                                                 # no onnxruntime dependency, works before anything
+                                                 # Jetson-specific is installed
+python3 scripts/verify_jetson_agx_gpu.py --provider tensorrt   # real ONNX session + optional live
+                                                                # /health,/predict,/agent/analyze checks
+python3 scripts/benchmark_jetson.py              # model microbenchmark + application (ClinicalAgent)
+                                                  # benchmark, per provider actually available
+python3 scripts/compare_cpu_gpu_results.py       # CPU vs CUDA/TensorRT result equivalence across
+                                                  # all 5 demo patients (risk_probability tolerance,
+                                                  # risk_level must never differ, alerts/training_counts
+                                                  # must be identical -- provider-independent by design)
+python3 scripts/validate_fp16.py                 # FP16 vs FP32 TensorRT comparison gate for --fp16
+python3 scripts/jetson_ymas_e2e.py --base-url http://127.0.0.1:8000   # the 15-step SYN-002 scenario
+                                                                        # against a live server
+```
+
+Every one of these reports `NOT_AVAILABLE`/`SKIPPED`/`hardware_is_agx_orin: false` rather than a
+fabricated pass when run off real Jetson hardware -- confirmed by actually running each of them in
+this development container.
+
+## Status vocabulary -- these are different things, never conflated
+
+- **GPU AVAILABLE**: `ort.get_available_providers()` lists `CUDAExecutionProvider` (a build-time
+  fact about the installed ONNX Runtime package, says nothing about whether it actually works).
+- **GPU VERIFIED** (`CUDA ACCELERATION VERIFIED`): a real `InferenceSession` was created with
+  `CUDAExecutionProvider`, `session.get_providers()` confirms it's actually in use, and a real
+  inference on the real SynexAgent model succeeded.
+- **TensorRT AVAILABLE**: `TensorrtExecutionProvider` is in `get_available_providers()`.
+- **TensorRT VERIFIED** (`TENSORRT ACCELERATION VERIFIED`): same real-session-and-real-inference
+  bar as CUDA, specifically for the TensorRT EP. A GPU wheel without the TensorRT EP compiled in
+  reports `CUDA ACCELERATION VERIFIED / TENSORRT EP NOT AVAILABLE`, never upgraded to a TensorRT claim.
+- **CPU FALLBACK / CPU SAFE MODE**: the session actually used `CPUExecutionProvider`, whether
+  because CPU was explicitly requested, no GPU is available, or an accelerator failed to
+  initialize (`fallback_reason` in `/health` explains which).
+
+## Dependency strategy
+
+- `backend/requirements-core.txt`: everything except ONNX Runtime (FastAPI, NumPy, Pydantic,
+  Uvicorn, httpx, PyJWT, cryptography, redis).
+- `backend/requirements.txt`: `requirements-core.txt` + the plain PyPI CPU `onnxruntime` wheel --
+  used for a normal PC, and used as the Jetson CPU-fallback pin (`grep '^onnxruntime==' backend/requirements.txt`
+  extracts just the version, never installed on `aarch64` alongside a GPU build).
+- On Jetson, `scripts/install_jetson_ort.py` selects a GPU ONNX Runtime candidate from
+  `config/jetson_ort_candidates.json` matched EXACTLY against the detected
+  `jetpack_family`/`cuda_major`/`python_abi`/`arch` (see `scripts/jetson_common.py::profile_matches`
+  for the equivalent deployment-profile logic). That file ships with **zero real candidates** --
+  every real wheel URL/version must be added by hand on the real device after a real successful
+  install, never guessed here. An unmatched environment falls back to CPU, or fails outright under
+  `--require-gpu`/`--require-tensorrt`.
+- `onnxruntime` (CPU) and `onnxruntime-gpu` are never installed together -- both are explicitly
+  uninstalled before either install path proceeds.
+
+## JetPack family classification (not hardcoded to one version)
+
+`scripts/jetson_common.py::classify_l4t_family()` classifies a detected L4T major version into a
+*family* (`jetpack6` for L4T 34-36 / CUDA 12.x, `jetpack7` for L4T 37-39 / CUDA 13.x) rather than
+asserting an exact minor/patch version ever shipped. `config/jetson_agx_orin_profiles.json`
+profiles are matched against the live-detected environment field-by-field
+(`l4t_major`/`cuda_major`/`cuda_minor`/`cudnn_major`/`tensorrt_major`/`tensorrt_minor`/
+`python_abi`/`arch` -- ALL must be non-null and equal); a profile missing any of those fields (like
+the shipped `unverified-template`) can never match, by construction.
+
+## FP16
+
+`--fp16` never applies on its own judgment. `scripts/validate_fp16.py` runs the TensorRT session
+twice (FP32 and FP16) across all 5 demo patients and only reports `PASS` if: both outputs are
+finite and in [0,1], the max `risk_probability` delta is within `--tolerance` (default 0.02),
+`risk_level` never differs, and rule-engine alerts/training_counts (provider-independent by
+construction) are byte-identical. Any failure keeps FP32. On this non-GPU host it correctly reports
+`SKIPPED` ("TensorRT unavailable on this host").
+
+## TensorRT EP options actually used
+
+`RiskEngine` attaches only options this ONNX Runtime version's TensorRT EP documents:
+`device_id`, `trt_engine_cache_enable`, `trt_engine_cache_path` (pointed at the gitignored
+`runtime/tensorrt-cache/` -- a compiled `.engine` is only valid for the exact device/driver/
+TensorRT/CUDA combination it was built on, so it is never committed), `trt_timing_cache_enable`,
+and `trt_fp16_enable` only when `--fp16` was validated and passed.
+
+## Optional TensorRT EP source build
+
+```bash
+bash scripts/deploy_jetson_agx.sh --auto --build-ort-tensorrt
+```
+
+Only attempted when explicitly passed. `scripts/build_ort_tensorrt.sh` checks real prerequisites
+(cmake, git, gcc/g++, CUDA toolkit dir, cuDNN headers, TensorRT headers, free disk/memory) and
+refuses to start the build if any are missing -- confirmed in this environment, where it correctly
+reports all three of CUDA/cuDNN/TensorRT missing and exits without attempting a build. Builds with
+`CMAKE_CUDA_ARCHITECTURES=87` (AGX Orin/Orin NX/Orin Nano are all compute capability 8.7 -- a fixed
+hardware fact, not a guess) and reads the checked-out ONNX Runtime's own `./build.sh --help` rather
+than assuming flags from older documentation.
+
+## Docker (secondary to the native path)
+
+`docker/Dockerfile` (CPU, unchanged) stays as-is. `docker/Dockerfile.jetson` is a SEPARATE file for
+the GPU path -- it takes a `BASE_IMAGE` build-arg that must be a real, already-verified
+JetPack-matched NVIDIA base image tag (never hardcoded here, since no such tag has been confirmed
+to exist and work from this environment). The native `.venv-jetson/` path above is the first path
+to get fully working before adding Docker's extra layer of complexity, per this project's own
+stated priority.
+
+## Runtime data layout (all gitignored)
+
+```
+runtime/jetson_environment.json          # scripts/detect_jetson_env.py output
+runtime/verify_report.json               # scripts/verify_jetson_agx_gpu.py output
+runtime/health.json / predict.json / agent_analyze.json
+runtime/pytest_output.txt
+runtime/tensorrt-cache/                  # TensorRT engine/timing cache -- never committed
+runtime/benchmarks/<timestamp>/          # benchmark.json + tegrastats.log
+runtime/reports/jetson-deployment-<timestamp>.{json,txt}
+runtime/synexagent.service               # written by --install-service, never auto-installed
+```
+
+## Packaging a release archive
+
+```bash
+bash scripts/package_jetson_release.sh
+```
+
+Produces `SynexAgent-YMAS-RC1-Jetson-AGX-Orin.tar.gz` containing only `backend/`, `frontend/dist/`,
+`scripts/`, `config/`, `docs/`, `VERSION`, `.env.example` -- explicitly enumerated, not "copy
+everything and exclude a blocklist" -- and refuses to write the archive if any `.sqlite*`/`.env`/
+`.engine`-shaped file is found in the staged tree.
+
+## What this deployment layer does NOT do
+
+- Does not upgrade JetPack, flash firmware, change the bootloader, or run `apt dist-upgrade`.
+- Does not change `nvpmodel` power mode automatically, ever.
+- Does not add DLA, INT8, or any new clinical/EMR feature -- the Clinical Workspace and medical
+  logic are frozen at the RC1 state this deployment layer wraps around.
+- Does not claim NVIDIA/TensorRT acceleration without a real measured session/inference to back it up.
+
+## Historical note
+
+Earlier revisions of this document described a simpler 8-step CPU-only-tested flow and a naive
+`'orin' in model.lower()` hardware check (which would have misclassified a Jetson Orin NX/Nano as
+AGX Orin). Both are superseded by the sections above; see `scripts/jetson_common.py` for the
+corrected classification logic and its test coverage in `backend/tests/test_jetson_common.py`.

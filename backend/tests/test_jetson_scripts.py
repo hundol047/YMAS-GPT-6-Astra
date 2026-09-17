@@ -36,9 +36,10 @@ def test_benchmark_script_never_fabricates_unavailable_provider_numbers():
     r = run_script('benchmark_jetson.py', '--warmup', '2', '--short', '3', '--sustained', '3')
     assert r.returncode == 0, r.stderr
     body = json.loads(r.stdout)
-    cpu = next(p for p in body['providers'] if p['provider'] == 'CPUExecutionProvider')
-    assert cpu['available'] is True and 'latency_ms' in cpu
-    for gpu in body['providers']:
-        if gpu['provider'] != 'CPUExecutionProvider':
-            assert gpu['available'] is False
-            assert 'latency_ms' not in gpu
+    for benchmark_key in ('model_microbenchmark', 'application_benchmark'):
+        cpu = next(p for p in body[benchmark_key] if p['provider'] == 'CPUExecutionProvider')
+        assert cpu['available'] is True and 'latency_ms' in cpu
+        for gpu in body[benchmark_key]:
+            if gpu['provider'] != 'CPUExecutionProvider':
+                assert gpu['available'] is False
+                assert 'latency_ms' not in gpu

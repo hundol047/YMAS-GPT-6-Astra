@@ -34,7 +34,16 @@ def time_calls(fn, n):
     return out
 
 
+def _latency_stats(all_ms):
+    return {'avg': round(statistics.mean(all_ms), 4), 'p50': round(percentile(all_ms, 50), 4),
+            'p95': round(percentile(all_ms, 95), 4), 'p99': round(percentile(all_ms, 99), 4),
+            'min': round(min(all_ms), 4), 'max': round(max(all_ms), 4)}
+
+
 def bench_provider(provider_env, warmup, short, sustained):
+    """Model microbenchmark: RiskEngine.predict() in a tight loop -- isolates the ONNX Runtime
+    session's own inference cost from the rest of the request path (see bench_provider_app below
+    for the whole-request figure)."""
     import onnxruntime as ort
     import os
     from app.services.risk_inference import RiskEngine
@@ -59,10 +68,40 @@ def bench_provider(provider_env, warmup, short, sustained):
     return {
         'provider': requested_name, 'available': True, 'cold_start_ms': round(cold_start_ms, 3),
         'warmup_runs': warmup, 'short_runs': short, 'sustained_runs': sustained,
-        'latency_ms': {'avg': round(statistics.mean(all_ms), 4), 'p50': round(percentile(all_ms, 50), 4),
-                       'p95': round(percentile(all_ms, 95), 4), 'min': round(min(all_ms), 4), 'max': round(max(all_ms), 4)},
+        'latency_ms': _latency_stats(all_ms),
         'throughput_per_sec': round(1000 / statistics.mean(all_ms), 2),
     }
+
+
+def bench_provider_app(provider_env, warmup, short, sustained):
+    """Application-level benchmark: the full ClinicalAgent.run() path (rule engine + risk model +
+    Clinical Summary assembly) for one demo patient -- the equivalent of what POST /agent/analyze
+    does, measured in-process rather than through the HTTP stack so it works standalone without a
+    server already running. The same fallback-detection rule as bench_provider applies: if the
+    engine actually ended up on a different provider than requested, this is reported as
+    unavailable rather than silently benchmarked as the requested provider."""
+    import onnxruntime as ort
+    import os
+    from app.services.risk_inference import RiskEngine
+    from app.services.emr_adapter import DemoAdapter
+    from app.services.clinical_agent import ClinicalAgent
+    requested_name = {'cpu': 'CPUExecutionProvider', 'cuda': 'CUDAExecutionProvider', 'tensorrt': 'TensorrtExecutionProvider'}[provider_env]
+    if provider_env != 'cpu' and requested_name not in ort.get_available_providers():
+        return {'provider': requested_name, 'available': False, 'note': 'not available on this host -- no fabricated numbers'}
+    os.environ['SYNEX_PROVIDER'] = provider_env
+    engine = RiskEngine()
+    if engine.session.get_providers()[0] != requested_name:
+        return {'provider': requested_name, 'available': False,
+                'note': f'requested but session actually used {engine.session.get_providers()[0]} -- reporting as unavailable'}
+    agent = ClinicalAgent(engine)
+    patient = DemoAdapter().get('SYN-002')
+    call = lambda: agent.run(patient)
+    time_calls(call, warmup)
+    short_ms = time_calls(call, short)
+    sustained_ms = time_calls(call, sustained)
+    all_ms = short_ms + sustained_ms
+    return {'provider': requested_name, 'available': True, 'patient': 'SYN-002',
+            'latency_ms': _latency_stats(all_ms), 'throughput_per_sec': round(1000 / statistics.mean(all_ms), 2)}
 
 
 def tegrastats_sample():
@@ -93,8 +132,12 @@ if __name__ == '__main__':
     report = {
         'power_mode_before_benchmark': power_mode(),
         'tegrastats_sample': tegrastats_sample(),
-        'providers': [bench_provider(p, args.warmup, args.short, args.sustained) for p in ('cpu', 'cuda', 'tensorrt')],
-        'note': 'Only measured numbers are reported. Providers unavailable on this host are marked '
-                'available:false and excluded from latency figures, never estimated.',
+        'model_microbenchmark': [bench_provider(p, args.warmup, args.short, args.sustained) for p in ('cpu', 'cuda', 'tensorrt')],
+        'application_benchmark': [bench_provider_app(p, args.warmup, args.short, args.sustained) for p in ('cpu', 'cuda', 'tensorrt')],
+        'note': 'Only measured numbers are reported. Providers unavailable on this host (or that '
+                'silently fell back to a different provider than requested) are marked '
+                'available:false and excluded from latency figures, never estimated. A GPU provider '
+                'is NOT assumed faster than CPU for this small (7-feature) model -- host/device '
+                'transfer overhead can make it slower; report whatever was actually measured.',
     }
     print(json.dumps(report, indent=2, ensure_ascii=False))

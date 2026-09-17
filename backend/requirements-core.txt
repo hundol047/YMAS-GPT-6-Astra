@@ -1,0 +1,14 @@
+# Everything SynexAgent needs EXCEPT the ONNX Runtime package itself. Deliberately split out (see
+# requirements.txt) so a Jetson deployment can install this core set first, run hardware detection
+# (scripts/detect_jetson_env.py), and only THEN choose a single ONNX Runtime package (CPU or a
+# Jetson-specific GPU build) matching the detected environment -- never a generic PyPI
+# `onnxruntime` install before that decision is made, and never both a CPU and a GPU build
+# installed at once.
+fastapi==0.141.1
+uvicorn==0.52.4
+numpy==2.5.3
+pydantic==2.13.5
+httpx==0.28.1
+pyjwt==2.10.1
+cryptography==44.0.0
+redis==8.1.0

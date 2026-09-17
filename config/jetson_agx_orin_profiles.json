@@ -1,5 +1,5 @@
 {
-  "_readme": "Deployment profiles for NVIDIA Jetson AGX Orin. Each profile pins the exact JetPack/L4T/CUDA/cuDNN/TensorRT/Python/Docker-base combination a working deployment was BUILT AND VERIFIED against on real hardware. When a new JetPack ships, add a NEW profile entry here (never edit an existing one's version numbers) and re-run scripts/verify_jetson_agx_gpu.py + scripts/deploy_jetson_agx.sh on the real device to fill it in and flip verified to true. Never mark a profile verified from documentation alone -- only from a real run's output.",
+  "_readme": "Deployment profiles for NVIDIA Jetson AGX Orin. Each profile pins the exact JetPack/L4T/CUDA/cuDNN/TensorRT/Python/Docker-base combination a working deployment was BUILT AND VERIFIED against on real hardware. When a new JetPack ships, add a NEW profile entry here (never edit an existing one's version numbers) and re-run scripts/verify_jetson_agx_gpu.py + scripts/deploy_jetson_agx.sh on the real device to fill it in and flip verified to true. Never mark a profile verified from documentation alone -- only from a real run's output. The l4t_major/cuda_major/cuda_minor/cudnn_major/tensorrt_major/tensorrt_minor/python_abi/arch fields are what scripts/jetson_common.py's profile_matches() actually compares against the live-detected environment -- ALL of them must be non-null and exactly equal for a profile to match; the human-readable jetpack/l4t/cuda/cudnn/tensorrt/python strings are for people reading this file, not for matching logic.",
   "profiles": [
     {
       "id": "unverified-template",
@@ -14,12 +14,19 @@
       "cuda": null,
       "cudnn": null,
       "tensorrt": null,
+      "l4t_major": null,
+      "cuda_major": null,
+      "cuda_minor": null,
+      "cudnn_major": null,
+      "tensorrt_major": null,
+      "tensorrt_minor": null,
+      "arch": "aarch64",
       "docker_base_image": null,
       "onnxruntime_source": "Jetson-specific ARM64 GPU build (e.g. from the Jetson Zoo or NVIDIA's own ORT wheel for the matching JetPack) -- never a generic x86 PyPI wheel",
       "onnxruntime_version": null,
       "supported_providers": ["CPUExecutionProvider"],
-      "notes": "Placeholder. Populate every null field from scripts/verify_jetson_agx_gpu.py's actual output on the target device -- do not fill in guessed version numbers."
+      "notes": "Placeholder. Populate every null field from scripts/verify_jetson_agx_gpu.py's and scripts/detect_jetson_env.py's actual output on the target device -- do not fill in guessed version numbers."
     }
   ],
-  "selection_policy": "If the device's detected JetPack/L4T does not exactly match any profile with verified=true, deploy_jetson_agx.sh must refuse to install a GPU wheel and instead run in CPU Safe Mode (CPUExecutionProvider only). This file ships with zero verified profiles because no run against real AGX Orin hardware has happened from this development environment."
+  "selection_policy": "If the device's detected environment does not EXACTLY match (via scripts/jetson_common.profile_matches -- every one of l4t_major/cuda_major/cuda_minor/cudnn_major/tensorrt_major/tensorrt_minor/python_abi/arch must agree) any profile with verified=true, deploy_jetson_agx.sh must refuse to install a GPU wheel and instead run in CPU Safe Mode (CPUExecutionProvider only). This file ships with zero verified profiles because no run against real AGX Orin hardware has happened from this development environment."
 }

@@ -107,6 +107,26 @@ def test_invalid_synex_provider_engine_still_loads_via_cpu_fallback(monkeypatch)
     assert health['fallback_reason'] == engine.fallback_reason
     assert health['providers'] == ['CPUExecutionProvider']
 
+def test_health_exposes_requested_provider_and_fp16_flag_additively(monkeypatch):
+    # Phase 24: requested_provider/fp16_enabled are ADDITIVE -- every pre-existing field
+    # (model_loaded/model_sha256/providers/fallback_reason/input/output) keeps its shape.
+    monkeypatch.setenv('SYNEX_PROVIDER', 'cpu')
+    monkeypatch.delenv('SYNEX_TENSORRT_FP16', raising=False)
+    engine = RiskEngine()
+    health = engine.health()
+    for key in ('model_loaded', 'model_sha256', 'providers', 'fallback_reason', 'input', 'output'):
+        assert key in health
+    assert health['requested_provider'] == 'cpu'
+    assert health['fp16_enabled'] is False
+
+def test_fp16_flag_ignored_when_tensorrt_not_actually_in_play(monkeypatch):
+    # SYNEX_TENSORRT_FP16=true must never silently apply to a CPU (or CUDA-only) session -- it only
+    # ever means something when TensorrtExecutionProvider is actually selected.
+    monkeypatch.setenv('SYNEX_PROVIDER', 'cpu')
+    monkeypatch.setenv('SYNEX_TENSORRT_FP16', 'true')
+    engine = RiskEngine()
+    assert engine.fp16_enabled is False
+
 def test_cuda_requested_on_cpu_only_machine_falls_back_and_reports_it(monkeypatch):
     # This sandbox genuinely has no CUDAExecutionProvider available -- a real (not mocked) exercise
     # of the cuda-requested-but-unavailable fallback path end to end.

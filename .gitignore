@@ -15,6 +15,9 @@ frontend/dist/models/
 *.sqlite
 *.db
 *.engine
+/runtime/
+.venv-jetson/
+/SynexAgent-YMAS-*.tar.gz
 *.log
 .sites-runtime/
 

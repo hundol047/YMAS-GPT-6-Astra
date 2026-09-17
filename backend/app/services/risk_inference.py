@@ -46,21 +46,61 @@ def select_providers(requested: str, available: list) -> tuple:
     return providers, fallback_reason
 
 
+# Where a Jetson TensorRT engine/timing cache is written -- gitignored runtime data, never a
+# source-tree path, so a compiled .engine file never ends up committed (an engine is only valid for
+# the exact GPU/TensorRT/CUDA/driver combination it was built on, so shipping one in git would be
+# actively misleading on a different device).
+RUNTIME_DIR = Path(__file__).resolve().parents[3] / 'runtime'
+TENSORRT_CACHE_DIR = RUNTIME_DIR / 'tensorrt-cache'
+
+
+def _provider_list_with_options(providers: list, *, fp16: bool = False) -> list:
+    """Attaches provider-specific options ONLY for the options this ONNX Runtime version's
+    TensorRT/CUDA execution providers actually document -- device_id, trt_engine_cache_enable,
+    trt_engine_cache_path, trt_timing_cache_enable, and (only when explicitly requested and
+    validated -- see scripts/validate_fp16.py) trt_fp16_enable. No option name is invented; if a
+    future ORT version renames/removes one of these, InferenceSession raises rather than silently
+    ignoring it, so a mismatch surfaces immediately rather than as quiet non-acceleration."""
+    result = []
+    for name in providers:
+        if name == 'TensorrtExecutionProvider':
+            TENSORRT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            options = {'device_id': 0, 'trt_engine_cache_enable': True,
+                       'trt_engine_cache_path': str(TENSORRT_CACHE_DIR), 'trt_timing_cache_enable': True}
+            if fp16:
+                options['trt_fp16_enable'] = True
+            result.append((name, options))
+        elif name == 'CUDAExecutionProvider':
+            result.append((name, {'device_id': 0}))
+        else:
+            result.append(name)
+    return result
+
+
 class RiskEngine:
     def __init__(self):
         requested = os.getenv('SYNEX_PROVIDER','cpu').lower()
+        # SYNEX_TENSORRT_FP16 is never auto-enabled by this class on its own judgment -- it must
+        # have already been validated (FP16 vs FP32 results compared across the demo patients, see
+        # scripts/validate_fp16.py) by whatever set this env var before startup. Ignored entirely
+        # unless the TensorRT provider is actually in play.
+        fp16 = os.getenv('SYNEX_TENSORRT_FP16', 'false').lower() == 'true'
+        self.requested_provider = requested
         available = ort.get_available_providers()
         providers, self.fallback_reason = select_providers(requested, available)
+        self.fp16_enabled = fp16 and 'TensorrtExecutionProvider' in providers
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = 1
         opts.inter_op_num_threads = 1
         try:
-            self.session = ort.InferenceSession(str(MODEL_PATH), sess_options=opts, providers=providers)
+            self.session = ort.InferenceSession(str(MODEL_PATH), sess_options=opts,
+                                                 providers=_provider_list_with_options(providers, fp16=self.fp16_enabled))
         except Exception:
             if providers == ['CPUExecutionProvider']:
                 raise
             logging.exception('Accelerator initialization failed; falling back to CPU')
             self.fallback_reason = 'Accelerator initialization failed; CPU fallback'
+            self.fp16_enabled = False
             self.session = ort.InferenceSession(str(MODEL_PATH), sess_options=opts, providers=['CPUExecutionProvider'])
         inp, out = self.session.get_inputs()[0], self.session.get_outputs()[0]
         if inp.name != 'features' or inp.shape[-1] != 7 or inp.type != 'tensor(float)' or out.name != 'risk_probability':
@@ -79,6 +119,10 @@ class RiskEngine:
                 'calibrated':False, 'interpretation':'Prototype AI risk score; not a clinical event probability'}
 
     def health(self):
+        # requested_provider/fp16_enabled are additive fields only -- every field the Clinical
+        # Workspace UI already reads (model_loaded/model_sha256/providers/fallback_reason/input/
+        # output) keeps its exact prior shape and meaning.
         return {'model_loaded':True,'model_sha256':self.sha256,'providers':self.session.get_providers(),
                 'fallback_reason':self.fallback_reason,'input':{'name':'features','shape':['batch',7]},
-                'output':{'name':'risk_probability','shape':['batch']}}
+                'output':{'name':'risk_probability','shape':['batch']},
+                'requested_provider':self.requested_provider,'fp16_enabled':self.fp16_enabled}
