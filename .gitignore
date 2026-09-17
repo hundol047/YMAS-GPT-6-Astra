@@ -12,6 +12,8 @@ frontend/dist/models/
 .env.local
 .env.test.local
 *.sqlite3*
+*.sqlite
+*.db
 *.engine
 *.log
 .sites-runtime/

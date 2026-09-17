@@ -206,6 +206,14 @@ class DiagnosisRepository:
             # a retried create for an already-active diagnosis returns the existing record rather
             # than minting a duplicate problem_list entry (which would also duplicate the
             # patient.conditions dual-write and the Timeline entry derived from problem_list).
+            #
+            # The Problem List entry (a patient-level "active condition") is conceptually distinct
+            # from an Encounter's own record of addressing it -- reusing the existing Diagnosis must
+            # NOT skip linking it to *this* encounter, or a later encounter that re-records the same
+            # active problem would leave diagnosis_ids empty for it. _link_to_encounter is itself
+            # idempotent (checked-before-append), so re-POSTing the same diagnosis to the SAME
+            # encounter twice still yields a single id in diagnosis_ids, not a duplicate.
+            self._link_to_encounter(p, encounter_id, existing.id)
             return existing
         diag = Diagnosis(id=_new_id('DX'), patient_id=patient_id, encounter_id=encounter_id,
                           code=code, code_system=code_system, display_name=display_name,
@@ -216,11 +224,15 @@ class DiagnosisRepository:
         # analysis path. Idempotent: skip if this exact text is already present.
         if display_name not in p.conditions:
             p.conditions.append(display_name)
+        self._link_to_encounter(p, encounter_id, diag.id)
+        return diag
+
+    def _link_to_encounter(self, p, encounter_id, diagnosis_id) -> None:
         for e in p.clinical_encounters:
             if e.id == encounter_id:
-                e.diagnosis_ids.append(diag.id)
+                if diagnosis_id not in e.diagnosis_ids:
+                    e.diagnosis_ids.append(diagnosis_id)
                 break
-        return diag
 
     def list(self, patient_id) -> list[Diagnosis]:
         return list(self.adapter.mutate(patient_id).problem_list)

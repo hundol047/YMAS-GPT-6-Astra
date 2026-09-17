@@ -33,6 +33,22 @@ treat it as an engineering starting point, not a compliance attestation.
 - **Data minimization**: `FHIRAdapter` fetches only the resource types this app actually uses
   (Condition/MedicationRequest/MedicationStatement/AllergyIntolerance/Observation), not a full
   patient record dump.
+- **Concurrency-safe idempotency**: Medication Order's `Idempotency-Key` guarantee is enforced by a
+  SQL uniqueness constraint (`PRIMARY KEY(scope,key)`, or Redis `SET NX` when `SYNEX_REDIS_URL` is
+  set) -- see `backend/app/services/idempotency.py`. Two genuinely concurrent requests carrying the
+  same key can never both create an order; only one claims the key, the other waits for and returns
+  its result. The frontend's button-disabled state is a secondary defense only, never relied on.
+- **SMART launch SSRF defense**: `/smart/launch?iss=...` validates the caller-supplied `iss` (HTTPS-
+  only, no embedded credentials, `SYNEX_SMART_TRUSTED_ISSUERS` allowlist, private/loopback/link-
+  local IP rejection via `ipaddress`) BEFORE any outbound discovery request -- see
+  `smart_launch.validate_smart_issuer()`. SMART launch state (`_LaunchStore`) now enforces its TTL
+  on every read (`pop()`), not just opportunistically on the next write, so an expired `state` can
+  never be used for a token exchange.
+- **CDS Hooks execution auth**: `GET /cds-services` (discovery) stays public in every mode, per the
+  CDS Hooks spec. `POST /cds-services/{service}` (execution) is gated by `CDS_AUTH_MODE` --
+  `none` (default) or `bearer` (production-recommended, reuses the same JWKS-based
+  `verify_oidc_token()` AUTH_MODE=oidc uses, plus a `cds:invoke` permission check) -- independent of
+  the app-wide `AUTH_MODE`.
 
 ## What a real deployment still needs (not implemented here)
 

@@ -165,6 +165,35 @@ def test_diagnosis_retry_with_same_code_does_not_duplicate_active_problem(client
     events = client.get('/audit/SYN-002').json()
     assert sum(1 for e in events if e['event'] == 'diagnosis_added' and e['detail'].get('diagnosis_id') == first.json()['id']) == 1
 
+def test_diagnosis_recorded_on_new_encounter_links_without_duplicating_problem_list(client):
+    # Phase 6 regression: Patient.problem_list ("active Atrial fibrillation") is conceptually
+    # distinct from an Encounter's own record of addressing it. Recording the SAME active diagnosis
+    # on a NEW encounter must NOT mint a second problem_list entry, but it MUST link the existing
+    # Diagnosis into the new encounter's diagnosis_ids -- the bug being fixed here is that the old
+    # dedup-reuse branch returned the existing Diagnosis without ever touching the new encounter.
+    enc_a = _create_encounter(client)
+    body = {'display_name': 'Atrial fibrillation', 'diagnosis_type': 'primary', 'code': 'I48.91', 'code_system': 'ICD-10'}
+    dx = client.post(f"/encounters/{enc_a['id']}/diagnoses", json=body).json()
+    assert dx['id'] in client.get(f"/encounters/{enc_a['id']}").json()['diagnosis_ids']
+
+    enc_b = _create_encounter(client)
+    assert dx['id'] not in client.get(f"/encounters/{enc_b['id']}").json()['diagnosis_ids']
+    second = client.post(f"/encounters/{enc_b['id']}/diagnoses", json=body)
+    assert second.status_code == 200
+    assert second.json()['id'] == dx['id']  # reused the existing active Problem, no DX-002 minted
+
+    problems = client.get('/patients/SYN-002/problem-list').json()
+    assert sum(1 for d in problems if d['code'] == 'I48.91' and d['status'] == 'active') == 1
+
+    enc_b_after = client.get(f"/encounters/{enc_b['id']}").json()
+    assert enc_b_after['diagnosis_ids'].count(dx['id']) == 1  # linked to the NEW encounter too
+
+    # Idempotent: recording the SAME diagnosis on the SAME encounter again must not duplicate the id.
+    third = client.post(f"/encounters/{enc_b['id']}/diagnoses", json=body)
+    assert third.status_code == 200
+    enc_b_final = client.get(f"/encounters/{enc_b['id']}").json()
+    assert enc_b_final['diagnosis_ids'].count(dx['id']) == 1
+
 def test_diagnosis_retry_without_code_dedupes_by_normalized_display_name(client):
     enc = _create_encounter(client)
     r1 = client.post(f"/encounters/{enc['id']}/diagnoses", json={'display_name': '  Hyperlipidemia  '})
@@ -224,6 +253,98 @@ def test_medication_order_without_idempotency_key_still_works_unchanged(client):
     body = {'medication_code': 'lisinopril', 'dose': 10, 'dose_unit': 'mg', 'route': 'PO'}
     r = client.post(f"/encounters/{enc['id']}/medication-orders", json=body)
     assert r.status_code == 200 and r.json()['status'] == 'confirmed'
+
+
+def test_medication_order_idempotency_key_is_concurrency_safe(client):
+    # Real thread-level concurrency (not sequential retries): fire 8 requests carrying the SAME
+    # Idempotency-Key + SAME payload at once via a ThreadPoolExecutor. Starlette runs each sync
+    # path-operation function in its own worker thread, so this genuinely reproduces the double-
+    # submit race the old get()-then-put() implementation was vulnerable to (services/idempotency.py
+    # begin()'s SQL PRIMARY KEY(scope,key) is what actually prevents it -- not this test's timing).
+    from concurrent.futures import ThreadPoolExecutor
+    enc = _create_encounter(client)
+    body = {'medication_code': 'furosemide', 'dose': 20, 'dose_unit': 'mg', 'route': 'PO'}
+    headers = {'Idempotency-Key': 'idem-concurrent-key-1'}
+    before = len(client.get('/patients/SYN-002').json()['medications'])
+
+    def fire(_):
+        return client.post(f"/encounters/{enc['id']}/medication-orders", json=body, headers=headers)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        responses = list(pool.map(fire, range(8)))
+
+    assert all(r.status_code == 200 for r in responses), [r.status_code for r in responses]
+    order_ids = {r.json()['id'] for r in responses}
+    assert len(order_ids) == 1  # every concurrent response shares the identical order_id
+
+    patient_data = client.get('/patients/SYN-002').json()
+    order_id = order_ids.pop()
+    matching_meds = [m for m in patient_data['medications'] if m.get('note') == f'order:{order_id}']
+    assert len(matching_meds) == 1  # exactly one patient.medications entry, not one per request
+    assert len(patient_data['medications']) == before + 1
+
+    orders = client.get('/patients/SYN-002/medication-orders').json()
+    assert sum(1 for o in orders if o['id'] == order_id) == 1  # exactly one MedicationOrder exists
+
+    timeline = client.get('/patients/SYN-002/timeline').json()
+    order_events = [e for e in timeline['events'] if e['type'] == 'medication' and e.get('source_id') == order_id]
+    assert len(order_events) == 1  # exactly one Timeline medication event
+
+
+def test_medication_order_idempotency_key_concurrent_conflicting_payload_is_409(client):
+    # Same key, two different payload groups racing concurrently: whichever payload's request wins
+    # the claim becomes THE order for this key -- every request sharing that exact payload gets 200
+    # with the identical order_id (a genuine same-key/same-payload retry, win or lose the race),
+    # while every request carrying the OTHER (conflicting) payload gets 409. Exactly one order is
+    # ever created either way -- there is no outcome where both payload groups succeed.
+    from concurrent.futures import ThreadPoolExecutor
+    enc = _create_encounter(client)
+    headers = {'Idempotency-Key': 'idem-concurrent-key-conflict'}
+    payload_a = {'medication_code': 'furosemide', 'dose': 20, 'dose_unit': 'mg', 'route': 'PO'}
+    payload_b = {'medication_code': 'furosemide', 'dose': 40, 'dose_unit': 'mg', 'route': 'PO'}
+    bodies = [payload_a] * 4 + [payload_b] * 4
+
+    def fire(body):
+        return client.post(f"/encounters/{enc['id']}/medication-orders", json=body, headers=headers)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        responses = list(pool.map(fire, bodies))
+
+    successes = [r for r in responses if r.status_code == 200]
+    conflicts = [r for r in responses if r.status_code == 409]
+    assert len(successes) == 4, [r.status_code for r in responses]  # only the winning payload's 4 requests
+    assert len(conflicts) == 4                                      # the losing payload's 4 requests
+    assert len({r.json()['id'] for r in successes}) == 1            # all successes are the SAME order
+
+    orders = client.get('/patients/SYN-002/medication-orders').json()
+    assert sum(1 for o in orders if o['dose'] in (20, 40)) == 1      # exactly one order was ever created
+
+
+def test_idempotency_store_lookup_is_not_process_local(client):
+    # Phase 12.B: a brand-new IdempotencyStore instance (e.g. a second worker process pointed at the
+    # same SYNEX_IDEMPOTENCY_PATH) must still see a key claimed/completed through a DIFFERENT
+    # instance -- proving persistence doesn't depend on a process-local dict the way the old
+    # dataclass-backed implementation did.
+    import app.main as main_module
+    from app.services.idempotency import IdempotencyStore
+    enc = _create_encounter(client)
+    body = {'medication_code': 'lisinopril', 'dose': 10, 'dose_unit': 'mg', 'route': 'PO'}
+    headers = {'Idempotency-Key': 'idem-multi-store-key'}
+    first = client.post(f"/encounters/{enc['id']}/medication-orders", json=body, headers=headers)
+    assert first.status_code == 200
+
+    # Reconstruct the exact scope/hash main.py computed for that request (demo-mode user id is
+    # 'demo-dr' by default -- see auth.py's demo identity).
+    from app.schemas import MedicationOrderCreateRequest
+    scope = main_module._idempotency_scope(main_module.User(id='demo-dr', role='clinician'), 'SYN-002', enc['id'],
+                                            'POST /encounters/{eid}/medication-orders')
+    request_hash = main_module._idempotency_request_hash(MedicationOrderCreateRequest(**body))
+
+    fresh_store = IdempotencyStore()  # separate instance, same env-configured SQLite path -- NOT the
+    # same object as app.state.idempotency, and never touched by the request above.
+    result = fresh_store.begin(scope, 'idem-multi-store-key', request_hash)
+    assert result.owner is False  # sees it as already completed, not claimable
+    assert result.response_body['id'] == first.json()['id']
 
 
 def test_medication_order_precheck_detects_existing_interaction(client):

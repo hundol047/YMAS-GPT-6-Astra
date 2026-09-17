@@ -19,7 +19,8 @@ from .services.data_quality import assess as assess_data_quality
 from .services.cds_hooks import SERVICES_DOC, build_cards
 from .services.smart_launch import (build_authorize_redirect, exchange_code, create_session, SESSIONS,
                                      SESSION_TTL_SECONDS, CURRENT_SESSION_ID)
-from .services.auth import get_current_user, require, require_all, User, verify_oidc_token, create_auth_session, AUTH_SESSION_TTL_SECONDS
+from .services.auth import (get_current_user, require, require_all, require_cds_invoke, User, verify_oidc_token,
+                             create_auth_session, AUTH_SESSION_TTL_SECONDS)
 from .services.validation import alert_type_breakdown, alert_fatigue_metrics
 from .services.imaging_pipeline import health as imaging_health
 from .services.rule_engine import RULE_METADATA
@@ -30,7 +31,7 @@ from .services.clinical_summary import build_summary
 from .services.results import unified_results
 from .services.vitals import assess as assess_vitals
 from .services.demo_seed import seed_demo_clinical_data
-from .services.idempotency import IdempotencyStore
+from .services.idempotency import IdempotencyStore, IdempotencyConflict, IdempotencyTimeout
 from fastapi import Depends, Cookie, Header
 from fastapi.responses import RedirectResponse
 import hashlib
@@ -453,8 +454,8 @@ def medication_order_precheck(eid:str,req:MedicationOrderCreateRequest,user:User
     return {'patient_id':pid,'encounter_id':eid,'drug':DRUGS[req.medication_code],'before':before,'after':after,
             'delta_percentage_points':delta,'new_alerts':new_alerts,'requires_override':bool(new_alerts)}
 
-def _idempotency_scope_key(user,pid,eid,endpoint,idempotency_key):
-    return (user.id,pid,eid,endpoint,idempotency_key)
+def _idempotency_scope(user,pid,eid,endpoint):
+    return f'{user.id}:{pid}:{eid}:{endpoint}'
 
 def _idempotency_request_hash(req):
     return hashlib.sha256(req.model_dump_json(exclude_none=False).encode()).hexdigest()
@@ -470,37 +471,56 @@ def create_medication_order(eid:str,req:MedicationOrderCreateRequest,user:User=D
     # HTTP-level idempotency (Idempotency-Key header): repositories.py's confirm(order_id) already
     # protects against a retried request for a KNOWN order id, but a network retry of THIS create
     # call has no id yet -- each attempt would otherwise mint its own new RX-<id> and double-append
-    # to patient.medications. Scoped by user+patient+encounter+endpoint+key (see
-    # services/idempotency.py) so two different clinicians -- or the same clinician on two
-    # different orders -- never collide on the same key. A replay with the SAME key but a
-    # DIFFERENT payload is rejected (409) rather than silently returning stale data.
+    # to patient.medications. Scoped by user+patient+encounter+endpoint (see services/idempotency.py)
+    # so two different clinicians -- or the same clinician on two different orders -- never collide
+    # on the same key.
+    #
+    # Concurrency-safe, not just sequential-retry-safe: services/idempotency.py's begin() uses a SQL
+    # uniqueness constraint (PRIMARY KEY(scope,key), or Redis SET NX when SYNEX_REDIS_URL is set) so
+    # two SIMULTANEOUS requests carrying the identical key can never both become the "owner" that
+    # does the real work -- the loser waits for and returns the winner's actual response instead of
+    # racing it. This is a server-side guarantee; the frontend's button-disabled state is only a
+    # secondary defense and is never relied on here. A replay with the SAME key but a DIFFERENT
+    # payload is rejected (409) rather than silently returning stale data.
     pid,_=call(app.state.encounter_repo.get_by_id,eid)
-    scope_key=_idempotency_scope_key(user,pid,eid,'POST /encounters/{eid}/medication-orders',idempotency_key) if idempotency_key else None
+    scope=_idempotency_scope(user,pid,eid,'POST /encounters/{eid}/medication-orders') if idempotency_key else None
     request_hash=_idempotency_request_hash(req) if idempotency_key else None
-    if scope_key:
-        existing=app.state.idempotency.get(scope_key)
-        if existing:
-            if existing.request_hash!=request_hash:
-                raise HTTPException(409,'Idempotency-Key was already used with a different request payload')
-            return existing.response_body
+    if idempotency_key:
+        try:
+            claim=app.state.idempotency.begin(scope,idempotency_key,request_hash)
+        except IdempotencyConflict:
+            raise HTTPException(409,'Idempotency-Key was already used with a different request payload')
+        except IdempotencyTimeout:
+            raise HTTPException(503,'Another request with this Idempotency-Key is still being processed; retry shortly.')
+        if not claim.owner:
+            return claim.response_body
 
-    p=patient(pid)
-    if req.medication_code not in DRUGS:raise HTTPException(422,'Unknown drug: select a catalog entry')
-    _,_,new_alerts,_=_agent_diff(p,req.medication_code)
-    if new_alerts and not (req.override_reason and req.override_reason.strip()):
-        raise HTTPException(409,f'SynexAgent detected {len(new_alerts)} new signal(s); an override_reason is required to confirm this order.')
-    order=call(app.state.medication_order_repo.create,pid,eid,medication_code=req.medication_code,medication_name=req.medication_name,
-               dose=req.dose,dose_unit=req.dose_unit,route=req.route,frequency=req.frequency,duration=req.duration,
-               quantity=req.quantity,prn=req.prn,indication=req.indication,start_date=req.start_date,end_date=req.end_date,
-               prescriber=req.prescriber)
-    order=call(app.state.medication_order_repo.confirm,order.id,override_reason=req.override_reason if new_alerts else None)
-    app.state.audit.record(pid,'medication_ordered',{'encounter_id':eid,'order_id':order.id,'medication_code':order.medication_code,
-        'dose':order.dose,'dose_unit':order.dose_unit,'route':order.route,'overridden':bool(new_alerts)},user_id=user.id,role=user.role)
-    if new_alerts:
-        app.state.audit.record(pid,'warning_overridden',{'encounter_id':eid,'order_id':order.id,'override_reason':order.override_reason,
-            'alert_ids':[a['id'] for a in new_alerts]},user_id=user.id,role=user.role)
-    if scope_key:
-        app.state.idempotency.put(scope_key,request_hash=request_hash,response_body=order.model_dump(mode='json'))
+    try:
+        p=patient(pid)
+        if req.medication_code not in DRUGS:raise HTTPException(422,'Unknown drug: select a catalog entry')
+        _,_,new_alerts,_=_agent_diff(p,req.medication_code)
+        if new_alerts and not (req.override_reason and req.override_reason.strip()):
+            raise HTTPException(409,f'SynexAgent detected {len(new_alerts)} new signal(s); an override_reason is required to confirm this order.')
+        order=call(app.state.medication_order_repo.create,pid,eid,medication_code=req.medication_code,medication_name=req.medication_name,
+                   dose=req.dose,dose_unit=req.dose_unit,route=req.route,frequency=req.frequency,duration=req.duration,
+                   quantity=req.quantity,prn=req.prn,indication=req.indication,start_date=req.start_date,end_date=req.end_date,
+                   prescriber=req.prescriber)
+        order=call(app.state.medication_order_repo.confirm,order.id,override_reason=req.override_reason if new_alerts else None)
+        app.state.audit.record(pid,'medication_ordered',{'encounter_id':eid,'order_id':order.id,'medication_code':order.medication_code,
+            'dose':order.dose,'dose_unit':order.dose_unit,'route':order.route,'overridden':bool(new_alerts)},user_id=user.id,role=user.role)
+        if new_alerts:
+            app.state.audit.record(pid,'warning_overridden',{'encounter_id':eid,'order_id':order.id,'override_reason':order.override_reason,
+                'alert_ids':[a['id'] for a in new_alerts]},user_id=user.id,role=user.role)
+    except Exception:
+        # Release the claim on ANY failure (validation, precheck-required-override, a repo error)
+        # so a client that fixes its payload and retries with the SAME Idempotency-Key gets a real
+        # attempt, not a permanently poisoned key -- only a genuine SUCCESS is ever cached.
+        if idempotency_key:
+            app.state.idempotency.fail(scope,idempotency_key)
+        raise
+
+    if idempotency_key:
+        app.state.idempotency.complete(scope,idempotency_key,response_status=200,response_body=order.model_dump(mode='json'))
     return order
 
 @app.get('/patients/{pid}/medication-orders')
@@ -574,11 +594,15 @@ def clinical_summary(pid:str,user:User=Depends(require('patient:read'))):
     return build_summary(p,lab_order_repo=app.state.lab_order_repo,ai_warning_events=events)
 
 # --- CDS Hooks: https://cds-hooks.org/ -------------------------------------------------------
+# Discovery stays PUBLIC in every mode -- a CDS Hooks client is expected to discover available
+# services before any authentication handshake, per the CDS Hooks spec. Only the EXECUTION endpoint
+# below is gated, and only by CDS_AUTH_MODE (independent of the app-wide AUTH_MODE -- see
+# auth.require_cds_invoke's docstring).
 @app.get('/cds-services')
 def cds_services():return SERVICES_DOC
 
 @app.post('/cds-services/synex-medication-safety')
-def cds_medication_safety(req:dict):
+def cds_medication_safety(req:dict,_caller:User|None=Depends(require_cds_invoke)):
     pid=(req.get('context') or {}).get('patientId')
     if not pid:raise HTTPException(400,'context.patientId is required')
     p=app.state.adapter.get(pid)
@@ -597,7 +621,13 @@ def smart_launch(iss:str,launch:str):
     scope=os.getenv('FHIR_SCOPE','launch openid fhirUser patient/*.read')
     if not client_id or not redirect_uri:
         raise HTTPException(500,'FHIR_CLIENT_ID and FHIR_REDIRECT_URI must be configured for SMART launch')
-    url=build_authorize_redirect(iss,launch,client_id,redirect_uri,scope)
+    try:
+        url=build_authorize_redirect(iss,launch,client_id,redirect_uri,scope)
+    except ValueError as e:
+        # validate_smart_issuer()/discover_smart_configuration() rejected this iss (untrusted,
+        # private/internal address, non-https, or a malformed discovery document) -- SSRF defense
+        # (Phase 4): the request never reaches any outbound HTTP call in that case.
+        raise HTTPException(400,f'Invalid SMART issuer: {e}')
     return RedirectResponse(url,status_code=307)
 
 @app.get('/smart/callback',include_in_schema=False)

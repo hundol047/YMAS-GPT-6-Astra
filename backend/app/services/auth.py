@@ -59,11 +59,15 @@ _READ_ACTIONS = {'patient:read', 'analysis:read', 'note:read', 'order:read', 'au
 # (NEVER_GRANTED below): raw demographic/EMR-record editing is a different, permanently-blocked
 # action that no endpoint implements.
 _CLINICIAN_WRITE_ACTIONS = {'patient:write', 'note:write', 'note:sign', 'order:write', 'alert:review', 'feedback:submit'}
+# Minimum permission a CDS Hooks caller (the hospital EMR's CDS client, not necessarily a logged-in
+# clinician) needs to invoke patient analysis -- see require_cds_invoke() below. Granted to every
+# existing role rather than inventing a separate system-account concept this demo doesn't need.
+_CDS_ACTIONS = {'cds:invoke'}
 ROLE_PERMISSIONS = {
-    'clinician_readonly': set(_READ_ACTIONS),
-    'clinician': _READ_ACTIONS | _CLINICIAN_WRITE_ACTIONS,
-    'pharmacist': {'patient:read', 'analysis:read', 'order:read', 'order:write', 'alert:review'},
-    'admin': _READ_ACTIONS | _CLINICIAN_WRITE_ACTIONS | {'user:admin'},
+    'clinician_readonly': set(_READ_ACTIONS) | _CDS_ACTIONS,
+    'clinician': _READ_ACTIONS | _CLINICIAN_WRITE_ACTIONS | _CDS_ACTIONS,
+    'pharmacist': {'patient:read', 'analysis:read', 'order:read', 'order:write', 'alert:review'} | _CDS_ACTIONS,
+    'admin': _READ_ACTIONS | _CLINICIAN_WRITE_ACTIONS | _CDS_ACTIONS | {'user:admin'},
 }
 NEVER_GRANTED = {'patient:edit', 'prescription:auto_modify', 'rule:edit'}
 
@@ -208,6 +212,41 @@ def require(action: str):
             raise HTTPException(403, f'Role "{user.role}" is not permitted to {action}')
         return user
     return checker
+
+
+def require_cds_invoke(authorization: Optional[str] = Header(None)) -> Optional[User]:
+    """CDS Hooks EXECUTION endpoint auth (Phase 7) -- deliberately NOT get_current_user()/require():
+    those are gated by the app-wide AUTH_MODE (in AUTH_MODE=demo, get_current_user() always returns
+    the fixed demo identity regardless of any Authorization header), whereas CDS_AUTH_MODE must be
+    independently toggleable -- a deployment can run the rest of the app in demo mode while still
+    requiring a real bearer token specifically for CDS Hooks calls from the hospital EMR.
+
+    CDS_AUTH_MODE=none (default -- matches most CDS Hooks reference implementations, fine for
+    demo/interop testing): no check at all, returns None.
+    CDS_AUTH_MODE=bearer (production-recommended): verifies Authorization: Bearer <token> via the
+    SAME JWKS-based verify_oidc_token() AUTH_MODE=oidc uses (OIDC_ISSUER/OIDC_AUDIENCE) -- reused
+    rather than a separate static-secret scheme -- then requires the resulting identity to hold the
+    cds:invoke permission.
+
+    The CDS Hooks DISCOVERY endpoint (GET /cds-services) intentionally does NOT use this dependency
+    and stays open in every mode -- see main.py's cds_services(): a CDS Hooks client is expected to
+    discover available services without prior authentication, per the CDS Hooks spec. Only the
+    EXECUTION endpoint (POST /cds-services/{service}) is gated here."""
+    mode = os.getenv('CDS_AUTH_MODE', 'none').lower()
+    if mode != 'bearer':
+        return None
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(401, 'CDS_AUTH_MODE=bearer requires an Authorization: Bearer token')
+    issuer, audience = os.environ['OIDC_ISSUER'], os.environ['OIDC_AUDIENCE']
+    try:
+        user = verify_oidc_token(authorization.split(' ', 1)[1], issuer, audience)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(401, f'Invalid token: {e}')
+    if not user.can('cds:invoke'):
+        raise HTTPException(403, f'Role "{user.role}" is not permitted to invoke CDS Hooks services')
+    return user
 
 
 def require_all(*actions: str):
