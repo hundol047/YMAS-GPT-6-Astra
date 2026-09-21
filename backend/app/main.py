@@ -1,6 +1,7 @@
 import json,os,logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -286,7 +287,7 @@ def feedback(req:FeedbackRequest,user:User=Depends(require('feedback:submit'))):
 def whoami(user:User=Depends(get_current_user)):return {'user_id':user.id,'role':user.role}
 
 @app.post('/auth/session')
-def create_auth_session_endpoint(authorization:str|None=Header(default=None)):
+def create_auth_session_endpoint(authorization:Optional[str]=Header(default=None)):
     # Exchanges an already-obtained OIDC bearer token for a server-side session + HttpOnly cookie,
     # so the React SPA never has to hold or resend a raw token itself -- see auth.py's
     # get_current_user() docstring for the full picture (and why this is a SEPARATE cookie/session
@@ -462,7 +463,7 @@ def _idempotency_request_hash(req):
 
 @app.post('/encounters/{eid}/medication-orders')
 def create_medication_order(eid:str,req:MedicationOrderCreateRequest,user:User=Depends(require('order:write')),
-                             idempotency_key:str|None=Header(default=None,alias='Idempotency-Key')):
+                             idempotency_key:Optional[str]=Header(default=None,alias='Idempotency-Key')):
     # SynexAgent never blocks a prescription automatically: a warning-producing order still goes
     # through as long as the clinician supplies a non-blank override_reason, which is recorded to
     # audit as 'warning_overridden'. The precheck is re-run here server-side (not trusted from the
@@ -602,7 +603,7 @@ def clinical_summary(pid:str,user:User=Depends(require('patient:read'))):
 def cds_services():return SERVICES_DOC
 
 @app.post('/cds-services/synex-medication-safety')
-def cds_medication_safety(req:dict,_caller:User|None=Depends(require_cds_invoke)):
+def cds_medication_safety(req:dict,_caller:Optional[User]=Depends(require_cds_invoke)):
     pid=(req.get('context') or {}).get('patientId')
     if not pid:raise HTTPException(400,'context.patientId is required')
     p=app.state.adapter.get(pid)
@@ -651,7 +652,7 @@ def smart_callback(code:str,state:str):
     return redirect
 
 @app.get('/session/context')
-def session_context(synex_session:str|None=Cookie(default=None)):
+def session_context(synex_session:Optional[str]=Cookie(default=None)):
     """What patient (if any) this browser's SMART launch session is scoped to -- deliberately the
     ONLY thing this endpoint exposes; see /smart/callback's comment on why the token itself never
     reaches here."""

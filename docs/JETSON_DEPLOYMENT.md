@@ -8,6 +8,38 @@ GPU). Every script below runs correctly here and takes the CPU Safe Mode path ho
 the one thing actually verified from this environment. Run it on a real device before trusting any
 GPU-related claim.
 
+## Two supported Python paths -- PC (latest) and Jetson AGX Orin + JetPack 5.1.2 (Python 3.8)
+
+| | PC (Windows/Linux) | Jetson AGX Orin + JetPack 5.1.2 |
+|---|---|---|
+| Python | >= 3.10 (tracks current PyPI releases) | **3.8.10** (JetPack 5.1.2's system default, confirmed on real hardware) |
+| Core deps | `backend/requirements-core.txt` | `backend/requirements-jetpack5.txt` |
+| CPU ONNX Runtime | `backend/requirements.txt` (`onnxruntime==1.30.0`) | `backend/requirements-jetpack5-ort-cpu.txt` (`onnxruntime==1.19.2`) |
+| GPU ONNX Runtime | n/a | verified-profile gate below, or `--ort-wheel` |
+
+**Root Cause** this split fixes: running `bash scripts/deploy_jetson_agx.sh --auto` on a real Jetson
+AGX Orin Developer Kit (Ubuntu 20.04.6 LTS, L4T R35.4.1, JetPack 5.1.2, CUDA 11.4.19, cuDNN 8.6,
+TensorRT 8.5.2.2, Python 3.8.10/cp38, aarch64) got past hardware detection and venv creation, then
+failed at dependency install with `ERROR: Could not find a version that satisfies the requirement
+fastapi==0.141.1`. That pin's own PyPI metadata requires Python >= 3.10 (checked, not guessed --
+`fastapi==0.124.4` is the actual last release whose metadata still declares `>=3.8` support); the
+same is true of the other `backend/requirements-core.txt` pins as of this round (`numpy==2.5.3`
+needs >=3.12, `pydantic==2.13.5` needs >=3.9, etc.) and of `backend/requirements.txt`'s
+`onnxruntime==1.30.0` (ships wheels only for cp311-cp314, none for cp38 at all). None of this is a
+downgrade of the PC path -- `requirements-core.txt`/`requirements.txt` keep tracking current PyPI
+releases unchanged; `requirements-jetpack5.txt`/`requirements-jetpack5-ort-cpu.txt` are new,
+separate files pinned to the LAST release of each package whose own PyPI release metadata still
+declares Python 3.8 support (verified via `pip install --dry-run --ignore-installed
+--only-binary=:all: --python-version 3.8 --platform manylinux2014_aarch64 --implementation cp
+--abi cp38 -r backend/requirements-jetpack5.txt`, which resolved cleanly with real cp38+aarch64
+wheels for every pin -- no source build, no Rust toolchain needed on the device).
+
+`scripts/deploy_jetson_agx.sh` and `verify_and_run.py` both detect this exact combination
+(confirmed AGX Orin hardware + `jetpack_family == 'jetpack5'` + target Python ABI `cp38`) via
+`scripts/jetson_common.py` and switch to the JetPack5 files automatically -- a generic x86 PC that
+merely happens to run Python 3.8 does **not** qualify; only a real, hardware-detected AGX Orin +
+JetPack 5 device does (see `backend/tests/test_python38_compat.py`).
+
 ## Quick Deploy
 
 ```bash
@@ -60,6 +92,7 @@ this non-GPU host) -- exactly the intended behavior.
 | `--allow-other-orin` | Also accept Jetson Orin NX/Nano as a valid target for testing (default target is AGX Orin specifically -- a naive `'orin' in model` string check would misclassify NX/Nano as AGX Orin, which this repo's `scripts/jetson_common.py::classify_orin_family()` fixes). |
 | `--performance-mode` | Reads (never changes) the current `nvpmodel` power mode around the benchmark. Power mode is never changed automatically, with or without this flag. |
 | `--python /path/to/python` | Use this interpreter to create `.venv-jetson` instead of the system default `command -v python3`. The default is never "the newest `python3.x` available" -- see "Python interpreter selection" below. |
+| `--ort-wheel /path/to/verified.whl` | Install this specific, already-verified ONNX Runtime wheel directly instead of consulting `config/jetson_ort_candidates.json`. Same as setting `SYNEX_ORT_WHEEL`. |
 
 ## Diagnostic tools (usable standalone, without deploying anything)
 
@@ -120,10 +153,15 @@ TensorRT -- and a CUDA-only fallback never satisfies a TensorRT requirement.
 ## Dependency strategy
 
 - `backend/requirements-core.txt`: everything except ONNX Runtime (FastAPI, NumPy, Pydantic,
-  Uvicorn, httpx, PyJWT, cryptography, redis).
+  Uvicorn, httpx, PyJWT, cryptography, redis) -- PC path (Python >= 3.10), tracks current releases.
 - `backend/requirements.txt`: `requirements-core.txt` + the plain PyPI CPU `onnxruntime` wheel --
-  used for a normal PC, and used as the Jetson CPU-fallback pin (`grep '^onnxruntime==' backend/requirements.txt`
-  extracts just the version, never installed on `aarch64` alongside a GPU build).
+  used for a normal PC, and used as the Jetson CPU-fallback pin on any non-JetPack5/cp38 target.
+- `backend/requirements-jetpack5.txt` / `backend/requirements-jetpack5-ort-cpu.txt`: the SAME role
+  as the two files above, but pinned to each package's last Python-3.8-supporting release (see
+  "Two supported Python paths" above for why these are separate files, not a downgrade of the PC
+  ones). `deploy_jetson_agx.sh`'s `cpu_ort_pin()` helper picks whichever CPU ORT file applies based
+  on the detected JetPack family + target Python ABI, so the same `grep '^onnxruntime=='` extraction
+  logic works for both paths without duplicating it at each call site.
 - On Jetson, `scripts/install_jetson_ort.py` **never** matches a candidate directly against the
   detected environment. It first requires an EXACT match (`scripts/jetson_common.py::profile_matches`,
   comparing `l4t_major`/`cuda_major`/`cuda_minor`/`cudnn_major`/`tensorrt_major`/`tensorrt_minor`/
@@ -136,7 +174,11 @@ TensorRT -- and a CUDA-only fallback never satisfies a TensorRT requirement.
   profile alone proves the *environment* was confirmed on real hardware, it does not by itself
   supply a working wheel. `config/jetson_ort_candidates.json` ships with **zero real candidates**;
   see `scripts/suggest_jetson_ort_candidate.py` for a read-only report of where this device stands
-  against both files, without ever writing to either.
+  against both files, without ever writing to either. Once you HAVE such a wheel confirmed for this
+  exact device, `--ort-wheel /path/to/verified.whl` (or `SYNEX_ORT_WHEEL=...`) installs it directly,
+  bypassing the candidates-file lookup -- this is an operator asserting they already did the
+  verification, not a way to skip it; `scripts/verify_jetson_agx_gpu.py` (step 8-9) still
+  independently proves whether it actually executes GPU nodes afterward.
 - The ABI used for both the profile match and the candidate lookup is the ABI of the **target
   venv's own interpreter** (`jetson_common.python_abi_of(python_bin)`, which runs that specific
   interpreter to ask it), never the ABI of whatever Python happens to be running the installer
@@ -178,6 +220,14 @@ choice on its own. (On this development container, the system default `python3` 
 older than `backend/requirements-core.txt`'s `numpy` pin requires -- `--python /usr/bin/python3.12`
 was used to validate the rest of this flow end-to-end here; on a real JetPack image, whichever
 `python3` ships as that image's default is what gets used unless `--python` overrides it.)
+
+**venv/pip robustness**: `deploy_jetson_agx.sh` never reuses a broken `.venv-jetson` (seen for real
+on a Jetson device: `.venv-jetson/bin/python3: No module named pip`, from an incomplete system
+`python3-venv`/`ensurepip`). It checks `"$PY" -m pip --version` after creating (or finding) the
+venv; a missing pip triggers `rm -rf .venv-jetson` + recreate, then `python3 -m ensurepip --upgrade`
+as a second attempt. If pip still can't be made to work, the script fails with the exact
+remediation command (`sudo apt-get install -y python3-venv python3-pip`) rather than limping on --
+it never runs `sudo` itself.
 
 ## Verified-profile capture (real hardware only)
 
@@ -273,8 +323,21 @@ everything and exclude a blocklist" -- and refuses to write the archive if any `
 
 Earlier revisions of this document described a simpler 8-step CPU-only-tested flow, a naive
 `'orin' in model.lower()` hardware check (which would have misclassified a Jetson Orin NX/Nano as
-AGX Orin), a JetPack classification based on version *ranges* rather than an exact table, and a
+AGX Orin), a JetPack classification based on version *ranges* rather than an exact table, a
 `--require-gpu`/`--require-tensorrt` gate based on session provider *registration* rather than real
-per-node execution proof. All are superseded by the sections above; see `scripts/jetson_common.py`
-for the corrected classification/verification logic and its test coverage in
-`backend/tests/test_jetson_common.py` and `backend/tests/test_jetson_scripts.py`.
+per-node execution proof, and a single `requirements-core.txt`/`requirements.txt` pair assumed to
+work on any Jetson Python. That last assumption broke on a real Jetson AGX Orin Developer Kit
+running JetPack 5.1.2 (Python 3.8.10) -- see "Two supported Python paths" and "Root Cause" above for
+the fix (`requirements-jetpack5.txt`/`requirements-jetpack5-ort-cpu.txt`, detected automatically).
+All of the above are superseded by the sections above; see `scripts/jetson_common.py` for the
+corrected classification/verification logic and its test coverage in
+`backend/tests/test_jetson_common.py`, `backend/tests/test_jetson_scripts.py`, and
+`backend/tests/test_python38_compat.py`.
+
+## Current status (as of this round, from this development environment)
+
+- Jetson hardware detected: **NO** (this environment is x86_64 cloud Linux).
+- JetPack 5.1.2 / Python 3.8 compatibility path: **code written and unit-tested** (`backend/tests/test_python38_compat.py`, 14/14 passing) -- not exercised against a real Python 3.8 interpreter, since none is available in this sandbox (confirmed: the org's package-index egress policy blocks the `python3.8` apt package's download host). Verified instead via real PyPI release metadata for every pin and a real `pip install --dry-run` resolver run against the exact target platform/ABI (cp38-manylinux2014_aarch64) -- see "Root Cause" above.
+- GPU ONNX Runtime: no verified candidate configured (`config/jetson_ort_candidates.json` ships empty, as always) -- still requires a real wheel confirmed on the actual device, or `--ort-wheel`.
+- CUDA execution verified: **NOT YET** -- requires a real run on the AGX Orin device.
+- TensorRT execution verified: **NOT YET** -- requires a real run on the AGX Orin device.

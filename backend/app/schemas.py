@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Optional, List
 from datetime import date
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -7,7 +7,13 @@ Unit = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 # the RHS `None` to the class-local name `date` before evaluating the annotation, so `date | None`
 # becomes `None | None` (TypeError). This alias sidesteps that for Encounter/DiagnosticReport/
 # ImagingStudy below, all of which have an optional `date` field.
-OptionalDate = date | None
+# Written as typing.Optional (not `date | None`, PEP 604) so this whole module imports cleanly on
+# Python 3.8 too -- see backend/requirements-jetpack5.txt / docs/JETSON_DEPLOYMENT.md for why: the
+# `int | None`-style union operator on bare types is only supported from Python 3.10 (Jetson AGX
+# Orin + JetPack 5.1.2 ships Python 3.8.10), and Pydantic v2 resolves every field annotation to a
+# real type object when building its validation schema, so this can't be dodged with
+# `from __future__ import annotations` the way a plain internal function's annotation can.
+OptionalDate = Optional[date]
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -22,8 +28,8 @@ class RiskFeatures(StrictModel):
 
 class Medication(StrictModel):
     drug_id: str = Field(min_length=1, max_length=80)
-    dispenses: float | None = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
-    started: date | None = None
+    dispenses: Optional[float] = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
+    started: Optional[date] = None
     status: Literal['active','stopped'] = 'active'
     note: str = Field(default='', max_length=300)
 
@@ -38,8 +44,8 @@ class Lab(StrictModel):
     value: float = Field(allow_inf_nan=False)
     unit: str
     date: date
-    low: float | None = Field(default=None, allow_inf_nan=False)
-    high: float | None = Field(default=None, allow_inf_nan=False)
+    low: Optional[float] = Field(default=None, allow_inf_nan=False)
+    high: Optional[float] = Field(default=None, allow_inf_nan=False)
 
 class Encounter(StrictModel):
     id: str
@@ -63,17 +69,17 @@ class ImagingStudy(StrictModel):
 class VitalSigns(StrictModel):
     id: str
     encounter_id: str
-    sbp: int | None = Field(default=None, ge=40, le=300)
-    dbp: int | None = Field(default=None, ge=20, le=200)
-    heart_rate: int | None = Field(default=None, ge=20, le=250)
-    respiratory_rate: int | None = Field(default=None, ge=4, le=60)
-    temperature_c: float | None = Field(default=None, ge=25, le=45, allow_inf_nan=False)
-    spo2: int | None = Field(default=None, ge=0, le=100)
+    sbp: Optional[int] = Field(default=None, ge=40, le=300)
+    dbp: Optional[int] = Field(default=None, ge=20, le=200)
+    heart_rate: Optional[int] = Field(default=None, ge=20, le=250)
+    respiratory_rate: Optional[int] = Field(default=None, ge=4, le=60)
+    temperature_c: Optional[float] = Field(default=None, ge=25, le=45, allow_inf_nan=False)
+    spo2: Optional[int] = Field(default=None, ge=0, le=100)
     # Encounter-time snapshot, independent of Patient.height_cm/weight_kg (which is a single
     # latest-known value used only for the 3D viewer). BMI is never stored -- see
     # backend/app/services/vitals.py's bmi() -- so it can never go stale relative to these two.
-    height_cm: float | None = Field(default=None, ge=30, le=250)
-    weight_kg: float | None = Field(default=None, ge=1, le=400)
+    height_cm: Optional[float] = Field(default=None, ge=30, le=250)
+    weight_kg: Optional[float] = Field(default=None, ge=1, le=400)
     measured_at: str
     recorder: str = ''
 
@@ -101,11 +107,11 @@ class ClinicalNote(StrictModel):
     author: str
     created_at: str
     updated_at: str
-    signed_at: str | None = None
+    signed_at: Optional[str] = None
     # A signed note's S/O/A/P fields above are frozen at sign time (enforced in
     # ClinicalNoteRepository, not here) -- any later edit becomes a new amendment instead of
     # overwriting the original, so the signed record is never silently rewritten.
-    amendments: list[ClinicalNoteAmendment] = Field(default_factory=list, max_length=100)
+    amendments: List[ClinicalNoteAmendment] = Field(default_factory=list, max_length=100)
 
 class Diagnosis(StrictModel):
     id: str
@@ -130,17 +136,17 @@ class MedicationOrder(StrictModel):
     route: Literal['PO','IV','IM','SC','topical']
     frequency: str = Field(default='', max_length=40)
     duration: str = Field(default='', max_length=40)
-    quantity: float | None = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
+    quantity: Optional[float] = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
     prn: bool = False
     indication: str = Field(default='', max_length=200)
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
     prescriber: str = ''
     ordered_at: str
     status: Literal['pending_review','confirmed','cancelled'] = 'pending_review'
     # Required (enforced in the /medication-orders endpoint, not here) only when the SynexAgent
     # precheck raised a warning and the clinician confirms anyway.
-    override_reason: str | None = Field(default=None, max_length=500)
+    override_reason: Optional[str] = Field(default=None, max_length=500)
 
     @field_validator('end_date')
     @classmethod
@@ -171,8 +177,8 @@ class LabResult(StrictModel):
     test_name: str
     value: float = Field(allow_inf_nan=False)
     unit: str = ''
-    reference_low: float | None = Field(default=None, allow_inf_nan=False)
-    reference_high: float | None = Field(default=None, allow_inf_nan=False)
+    reference_low: Optional[float] = Field(default=None, allow_inf_nan=False)
+    reference_high: Optional[float] = Field(default=None, allow_inf_nan=False)
     abnormal_flag: Literal['normal','high','low','critical'] = 'normal'
     measured_at: str
     reported_at: str
@@ -186,14 +192,14 @@ class ClinicalEncounter(StrictModel):
     department: str = ''
     attending_physician: str = ''
     started_at: str
-    ended_at: str | None = None
+    ended_at: Optional[str] = None
     status: Literal['in_progress','completed','cancelled'] = 'in_progress'
     chief_complaint: str = Field(default='', max_length=300)
-    vital_signs: list[VitalSigns] = Field(default_factory=list, max_length=50)
-    note_ids: list[str] = Field(default_factory=list, max_length=50)
-    diagnosis_ids: list[str] = Field(default_factory=list, max_length=50)
-    medication_order_ids: list[str] = Field(default_factory=list, max_length=50)
-    lab_order_ids: list[str] = Field(default_factory=list, max_length=50)
+    vital_signs: List[VitalSigns] = Field(default_factory=list, max_length=50)
+    note_ids: List[str] = Field(default_factory=list, max_length=50)
+    diagnosis_ids: List[str] = Field(default_factory=list, max_length=50)
+    medication_order_ids: List[str] = Field(default_factory=list, max_length=50)
+    lab_order_ids: List[str] = Field(default_factory=list, max_length=50)
     signed: bool = False
 
 class Patient(StrictModel):
@@ -203,38 +209,38 @@ class Patient(StrictModel):
     sex: str
     diagnosis: str
     scenario: str = ''
-    medications: list[Medication] = Field(max_length=100)
-    conditions: list[str] = Field(max_length=100)
-    allergies: list[Allergy] = Field(max_length=100)
-    labs: list[Lab] = Field(max_length=500)
-    history: list[str] = Field(default_factory=list)
-    missing: list[str] = Field(default_factory=list)
+    medications: List[Medication] = Field(max_length=100)
+    conditions: List[str] = Field(max_length=100)
+    allergies: List[Allergy] = Field(max_length=100)
+    labs: List[Lab] = Field(max_length=500)
+    history: List[str] = Field(default_factory=list)
+    missing: List[str] = Field(default_factory=list)
     # Optional, patient-reported build. Never used by the risk model (see docs/MODEL_CARD.md's
     # fixed 7-feature contract) or the rule engine -- purely for the 3D viewer's body-scale
     # approximation (frontend/src/data/anatomyMap.js bodyScaleFor). Absent for demo patients that
     # never had this recorded; never guessed.
-    height_cm: float | None = Field(default=None, ge=30, le=250)
-    weight_kg: float | None = Field(default=None, ge=1, le=400)
+    height_cm: Optional[float] = Field(default=None, ge=30, le=250)
+    weight_kg: Optional[float] = Field(default=None, ge=1, le=400)
     # Optional, additive clinical history. Not consumed by the risk model or rule engine (same
     # 7-feature contract as always) -- exposed so FHIRAdapter can surface real Encounter/
     # DiagnosticReport/ImagingStudy data instead of just fetching and discarding it.
-    encounters: list[Encounter] = Field(default_factory=list, max_length=200)
-    diagnostic_reports: list[DiagnosticReport] = Field(default_factory=list, max_length=200)
-    imaging_studies: list[ImagingStudy] = Field(default_factory=list, max_length=200)
+    encounters: List[Encounter] = Field(default_factory=list, max_length=200)
+    diagnostic_reports: List[DiagnosticReport] = Field(default_factory=list, max_length=200)
+    imaging_studies: List[ImagingStudy] = Field(default_factory=list, max_length=200)
     # Clinical Workspace demographic/identifier fields. All optional so every existing
     # patients.json entry and every existing test payload (which omit them) keeps validating.
-    mrn: str | None = Field(default=None, max_length=40)
+    mrn: Optional[str] = Field(default=None, max_length=40)
     date_of_birth: OptionalDate = None
-    phone: str | None = Field(default=None, max_length=40)
-    address: str | None = Field(default=None, max_length=200)
-    blood_type: str | None = Field(default=None, max_length=10)
-    emergency_contact: str | None = Field(default=None, max_length=120)
+    phone: Optional[str] = Field(default=None, max_length=40)
+    address: Optional[str] = Field(default=None, max_length=200)
+    blood_type: Optional[str] = Field(default=None, max_length=10)
+    emergency_contact: Optional[str] = Field(default=None, max_length=120)
     # Structured clinical history. `conditions`/`medications`/`labs` above remain the flat,
     # unchanged contract the rule engine/risk model read -- creating a Diagnosis/MedicationOrder/
     # LabResult also dual-writes into those flat lists (see repositories.py), so this structured
     # layer is additive and never replaces the existing pipeline's inputs.
-    problem_list: list[Diagnosis] = Field(default_factory=list, max_length=100)
-    clinical_encounters: list[ClinicalEncounter] = Field(default_factory=list, max_length=100)
+    problem_list: List[Diagnosis] = Field(default_factory=list, max_length=100)
+    clinical_encounters: List[ClinicalEncounter] = Field(default_factory=list, max_length=100)
     demo: Literal[True] = True
 
 class PatientRequest(StrictModel):
@@ -242,7 +248,7 @@ class PatientRequest(StrictModel):
 
 class SimulationRequest(PatientRequest):
     drug_id: str
-    dispenses: float | None = Field(default=1, ge=0, le=10000, allow_inf_nan=False)
+    dispenses: Optional[float] = Field(default=1, ge=0, le=10000, allow_inf_nan=False)
 
 class FeedbackRequest(StrictModel):
     analysis_id: str
@@ -274,19 +280,19 @@ class EncounterCreateRequest(StrictModel):
     chief_complaint: str = Field(default='', max_length=300)
 
 class EncounterUpdateRequest(StrictModel):
-    status: Literal['in_progress','completed','cancelled'] | None = None
-    ended_at: str | None = None
-    signed: bool | None = None
+    status: Optional[Literal['in_progress','completed','cancelled']] = None
+    ended_at: Optional[str] = None
+    signed: Optional[bool] = None
 
 class VitalsCreateRequest(StrictModel):
-    sbp: int | None = Field(default=None, ge=40, le=300)
-    dbp: int | None = Field(default=None, ge=20, le=200)
-    heart_rate: int | None = Field(default=None, ge=20, le=250)
-    respiratory_rate: int | None = Field(default=None, ge=4, le=60)
-    temperature_c: float | None = Field(default=None, ge=25, le=45, allow_inf_nan=False)
-    spo2: int | None = Field(default=None, ge=0, le=100)
-    height_cm: float | None = Field(default=None, ge=30, le=250)
-    weight_kg: float | None = Field(default=None, ge=1, le=400)
+    sbp: Optional[int] = Field(default=None, ge=40, le=300)
+    dbp: Optional[int] = Field(default=None, ge=20, le=200)
+    heart_rate: Optional[int] = Field(default=None, ge=20, le=250)
+    respiratory_rate: Optional[int] = Field(default=None, ge=4, le=60)
+    temperature_c: Optional[float] = Field(default=None, ge=25, le=45, allow_inf_nan=False)
+    spo2: Optional[int] = Field(default=None, ge=0, le=100)
+    height_cm: Optional[float] = Field(default=None, ge=30, le=250)
+    weight_kg: Optional[float] = Field(default=None, ge=1, le=400)
     recorder: str = Field(default='', max_length=80)
 
 class NoteCreateRequest(StrictModel):
@@ -297,18 +303,18 @@ class NoteCreateRequest(StrictModel):
     plan: str = Field(default='', max_length=4000)
 
 class NoteUpdateRequest(StrictModel):
-    subjective: str | None = Field(default=None, max_length=4000)
-    objective: str | None = Field(default=None, max_length=4000)
-    assessment: str | None = Field(default=None, max_length=4000)
-    plan: str | None = Field(default=None, max_length=4000)
+    subjective: Optional[str] = Field(default=None, max_length=4000)
+    objective: Optional[str] = Field(default=None, max_length=4000)
+    assessment: Optional[str] = Field(default=None, max_length=4000)
+    plan: Optional[str] = Field(default=None, max_length=4000)
 
 class NoteAmendRequest(StrictModel):
     author: str = Field(min_length=1, max_length=80)
     reason: str = Field(min_length=1, max_length=500)
-    subjective: str | None = Field(default=None, max_length=4000)
-    objective: str | None = Field(default=None, max_length=4000)
-    assessment: str | None = Field(default=None, max_length=4000)
-    plan: str | None = Field(default=None, max_length=4000)
+    subjective: Optional[str] = Field(default=None, max_length=4000)
+    objective: Optional[str] = Field(default=None, max_length=4000)
+    assessment: Optional[str] = Field(default=None, max_length=4000)
+    plan: Optional[str] = Field(default=None, max_length=4000)
 
 class DiagnosisCreateRequest(StrictModel):
     display_name: str = Field(min_length=1, max_length=200)
@@ -325,16 +331,16 @@ class MedicationOrderCreateRequest(StrictModel):
     route: Literal['PO','IV','IM','SC','topical']
     frequency: str = Field(default='', max_length=40)
     duration: str = Field(default='', max_length=40)
-    quantity: float | None = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
+    quantity: Optional[float] = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
     prn: bool = False
     indication: str = Field(default='', max_length=200)
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
     prescriber: str = Field(default='', max_length=80)
     # Required by the /medication-orders endpoint (not here) only when the server-side SynexAgent
     # precheck (re-run there, never trusted from the client) finds a new warning; a clean precheck
     # can confirm with this omitted. /medication-orders/precheck ignores this field entirely.
-    override_reason: str | None = Field(default=None, max_length=500)
+    override_reason: Optional[str] = Field(default=None, max_length=500)
 
     @field_validator('end_date')
     @classmethod
@@ -355,5 +361,5 @@ class LabOrderCreateRequest(StrictModel):
 class LabResultCreateRequest(StrictModel):
     value: float = Field(allow_inf_nan=False)
     unit: str = Field(default='', max_length=20)
-    reference_low: float | None = Field(default=None, allow_inf_nan=False)
-    reference_high: float | None = Field(default=None, allow_inf_nan=False)
+    reference_low: Optional[float] = Field(default=None, allow_inf_nan=False)
+    reference_high: Optional[float] = Field(default=None, allow_inf_nan=False)

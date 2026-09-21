@@ -39,6 +39,7 @@ INSTALL_SERVICE=false
 ALLOW_OTHER_ORIN=false
 PERFORMANCE_MODE=false
 PYTHON_OVERRIDE=""
+ORT_WHEEL_OVERRIDE="${SYNEX_ORT_WHEEL:-}"
 
 usage() {
   cat <<'EOF'
@@ -65,6 +66,11 @@ Usage: bash scripts/deploy_jetson_agx.sh [options]
                           -- on a real JetPack/Ubuntu image, plain `python3` IS the supported default;
                           silently preferring a newer python3.1x that happens to also be installed can
                           select an ABI NVIDIA's own GPU ONNX Runtime wheels were never built for.
+  --ort-wheel /path/to/verified.whl   Install THIS specific, already-verified ONNX Runtime wheel
+                          instead of consulting config/jetson_ort_candidates.json. Use this once you
+                          have obtained and confirmed a real GPU ORT wheel for this exact device
+                          (see docs/JETSON_DEPLOYMENT.md) -- never a guessed or unconfirmed URL.
+                          Same effect as setting SYNEX_ORT_WHEEL in the environment.
   -h, --help              This message.
 EOF
 }
@@ -84,6 +90,7 @@ while [[ $# -gt 0 ]]; do
     --allow-other-orin) ALLOW_OTHER_ORIN=true; shift ;;
     --performance-mode) PERFORMANCE_MODE=true; shift ;;
     --python) PYTHON_OVERRIDE="$2"; shift 2 ;;
+    --ort-wheel) ORT_WHEEL_OVERRIDE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
@@ -131,11 +138,75 @@ else
   echo "No python3 interpreter found on this system (pass --python /path/to/python to specify one)."; exit 1
 fi
 echo "Using $PYTHON_BIN ($("$PYTHON_BIN" --version 2>&1)) to create $VENV_DIR"
-if [ ! -d "$VENV_DIR" ]; then "$PYTHON_BIN" -m venv "$VENV_DIR"; fi
+# Robustness: a venv without a working pip (seen for real: ".venv-jetson/bin/python3: No module
+# named pip", typically because the system's python3-venv/ensurepip package is missing or partial)
+# is NEVER silently reused -- it's removed and recreated, and if pip still can't be made to work,
+# this script fails with the exact remediation command rather than limping on with a broken
+# environment. This never runs `sudo apt install` itself -- only prints what the operator needs to
+# run, since this script must not assume passwordless sudo or silently modify system packages.
+create_or_repair_venv() {
+  if [ -d "$VENV_DIR" ]; then
+    if "$PY" -m pip --version >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "$VENV_DIR exists but has no working pip -- removing and recreating it (never reusing a broken venv)."
+    rm -rf "$VENV_DIR"
+  fi
+  "$PYTHON_BIN" -m venv "$VENV_DIR"
+  if "$PY" -m pip --version >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "$VENV_DIR was created but pip is still missing -- trying '$PYTHON_BIN -m ensurepip --upgrade'."
+  if "$PY" -m ensurepip --upgrade >/dev/null 2>&1 && "$PY" -m pip --version >/dev/null 2>&1; then
+    return 0
+  fi
+  echo ""
+  echo "FAILED: could not get a working pip into $VENV_DIR."
+  echo "This usually means the system's venv/ensurepip support is incomplete for $PYTHON_BIN."
+  echo "On a real JetPack/Ubuntu image, install it yourself, then re-run this script:"
+  echo "  sudo apt-get update && sudo apt-get install -y python3-venv python3-pip"
+  exit 1
+}
+create_or_repair_venv
 "$PY" -m pip install -q --upgrade pip
 
-echo "== Step 6/20: Core dependency installation (no ONNX Runtime yet) =="
-"$PY" -m pip install -q -r backend/requirements-core.txt
+echo "== Step 5b/20: JetPack family + target Python ABI branch =="
+# The target venv's OWN interpreter ABI (queried by actually running it), never this script's own
+# interpreter's ABI -- see jetson_common.python_abi_of's docstring for why those can legitimately
+# differ (e.g. --python pointing at a non-default interpreter).
+TARGET_PYTHON_ABI=$(python3 -c "
+import sys; sys.path.insert(0,'scripts')
+import jetson_common as jc
+print(jc.python_abi_of('$PY') or '')
+")
+JETPACK_FAMILY=$(python3 -c "import json;print(json.load(open('$DETECT_JSON_PATH'))['nvidia_stack']['l4t']['jetpack_family'] or '')")
+echo "target venv python_abi=$TARGET_PYTHON_ABI jetpack_family=$JETPACK_FAMILY"
+if [ "$JETPACK_FAMILY" = "jetpack5" ] && [ "$TARGET_PYTHON_ABI" = "cp38" ]; then
+  # Confirmed real environment: NVIDIA Jetson AGX Orin Developer Kit, JetPack 5.1.2 (L4T 35.4.1),
+  # Python 3.8.10 -- current PyPI releases of fastapi/uvicorn/numpy/pydantic/pyjwt/cryptography/
+  # redis dropped Python 3.8 wheels (confirmed via each package's own PyPI release metadata, not
+  # guessed -- see backend/requirements-jetpack5.txt's header), which is EXACTLY the
+  # "Could not find a version that satisfies the requirement fastapi==0.141.1" failure this branch
+  # fixes. Any other JetPack family, or a JetPack 5 device on a different Python, keeps using the
+  # normal requirements-core.txt/requirements.txt path below unchanged.
+  echo "JetPack 5 + Python 3.8 (cp38) detected -- using backend/requirements-jetpack5.txt."
+  CORE_REQ_FILE="backend/requirements-jetpack5.txt"
+  CPU_ORT_REQ_FILE="backend/requirements-jetpack5-ort-cpu.txt"
+else
+  CORE_REQ_FILE="backend/requirements-core.txt"
+  CPU_ORT_REQ_FILE=""   # empty means "use requirements.txt's onnxruntime== pin", below
+fi
+
+echo "== Step 6/20: Core dependency installation ($CORE_REQ_FILE, no ONNX Runtime yet) =="
+"$PY" -m pip install -q -r "$CORE_REQ_FILE"
+
+cpu_ort_pin() {
+  if [ -n "$CPU_ORT_REQ_FILE" ]; then
+    grep -E '^onnxruntime==' "$CPU_ORT_REQ_FILE"
+  else
+    grep -E '^onnxruntime==' backend/requirements.txt
+  fi
+}
 
 echo "== Step 7/20: ONNX Runtime installation matching the detected environment =="
 EFFECTIVE_PROVIDER="cpu"
@@ -143,14 +214,34 @@ GPU_INSTALL_STATUS="not_attempted"
 if [ "$PROVIDER" = "cpu" ]; then
   echo "Provider explicitly forced to cpu -- installing plain CPU onnxruntime."
   "$PY" -m pip uninstall -y -q onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
-  ONNXRUNTIME_PIN=$(grep -E '^onnxruntime==' backend/requirements.txt)
+  ONNXRUNTIME_PIN=$(cpu_ort_pin)
   "$PY" -m pip install -q "$ONNXRUNTIME_PIN"
   GPU_INSTALL_STATUS="skipped_cpu_forced"
 elif [ "$ARCH" != "aarch64" ]; then
   echo "arch=$ARCH is not aarch64 -- a Jetson GPU ONNX Runtime build cannot be installed here. CPU Safe Mode."
-  ONNXRUNTIME_PIN=$(grep -E '^onnxruntime==' backend/requirements.txt)
+  ONNXRUNTIME_PIN=$(cpu_ort_pin)
   "$PY" -m pip install -q "$ONNXRUNTIME_PIN"
   GPU_INSTALL_STATUS="skipped_not_aarch64"
+elif [ -n "$ORT_WHEEL_OVERRIDE" ]; then
+  # --ort-wheel/SYNEX_ORT_WHEEL: install THIS specific wheel directly, bypassing
+  # config/jetson_ort_candidates.json entirely -- the operator is asserting they already confirmed
+  # this exact wheel works on this exact device (see docs/JETSON_DEPLOYMENT.md). This script does
+  # not re-verify the URL/file is genuine beyond checking it exists; scripts/verify_jetson_agx_gpu.py
+  # (step 8-9 below) still independently proves whether it actually executes GPU nodes.
+  if [ ! -f "$ORT_WHEEL_OVERRIDE" ]; then
+    echo "--ort-wheel $ORT_WHEEL_OVERRIDE does not exist -- refusing to guess a substitute."; exit 1
+  fi
+  echo "--ort-wheel passed -- installing $ORT_WHEEL_OVERRIDE directly (skipping candidate lookup)."
+  "$PY" -m pip uninstall -y -q onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
+  if "$PY" -m pip install -q "$ORT_WHEEL_OVERRIDE"; then
+    GPU_INSTALL_STATUS="ort_wheel_override_installed"
+  else
+    echo "Failed to install $ORT_WHEEL_OVERRIDE -- falling back to CPU Safe Mode."
+    GPU_INSTALL_STATUS="ort_wheel_override_failed"
+    "$PY" -m pip uninstall -y -q onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
+    ONNXRUNTIME_PIN=$(cpu_ort_pin)
+    "$PY" -m pip install -q "$ONNXRUNTIME_PIN"
+  fi
 else
   if [ "$BUILD_ORT_TENSORRT" = true ]; then
     echo "--build-ort-tensorrt passed -- attempting TensorRT EP source build (see scripts/build_ort_tensorrt.sh)."
@@ -184,7 +275,7 @@ else
   if [ "$GPU_INSTALL_STATUS" != "installed_and_verified" ] && [ "$GPU_INSTALL_STATUS" != "source_build_installed" ]; then
     echo "No GPU ONNX Runtime installed ($GPU_INSTALL_STATUS) -- installing plain CPU onnxruntime instead."
     "$PY" -m pip uninstall -y -q onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
-    ONNXRUNTIME_PIN=$(grep -E '^onnxruntime==' backend/requirements.txt)
+    ONNXRUNTIME_PIN=$(cpu_ort_pin)
     "$PY" -m pip install -q "$ONNXRUNTIME_PIN"
   fi
 fi

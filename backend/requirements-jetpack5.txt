@@ -1,0 +1,32 @@
+# Core dependencies for NVIDIA Jetson AGX Orin + JetPack 5.1.2 specifically -- Ubuntu 20.04.6 LTS,
+# aarch64, Python 3.8.10 (cp38). This is a SEPARATE file from requirements-core.txt (the PC / latest
+# path), never a downgrade of it: requirements-core.txt keeps tracking current PyPI releases for
+# Python 3.10+ (Windows/Linux PC), and this file exists ONLY because those same current releases
+# stopped shipping Python 3.8 wheels (e.g. fastapi==0.141.1 here requires >=3.10 -- see
+# docs/JETSON_DEPLOYMENT.md's "Root Cause" section for the exact failure this fixes).
+#
+# Every version below is the LAST release of that package whose own PyPI metadata declares Python
+# 3.8 support (checked via each release's Requires-Python field, not guessed), confirmed to still
+# resolve together with a real `pip install --dry-run --ignore-installed --only-binary=:all:
+# --python-version 3.8 --platform manylinux2014_aarch64 --implementation cp --abi cp38` run against
+# this exact file (see docs/JETSON_DEPLOYMENT.md for the full command and result) -- every direct
+# pin here has a real cp38 aarch64 wheel on PyPI, not just an sdist that would need a source build
+# (and, for cryptography specifically, a working Rust toolchain) on the device.
+#
+# scripts/deploy_jetson_agx.sh installs THIS file instead of requirements-core.txt only when the
+# detected environment is JetPack 5 family AND the target interpreter's ABI is cp38 -- any other
+# JetPack family (6, 7) or any other Python (e.g. a JetPack 5 device someone later upgrades to a
+# newer Python) keeps using the normal requirements-core.txt/requirements.txt path unchanged. ONNX
+# Runtime is still never in this file -- see requirements-jetpack5-ort-cpu.txt and
+# scripts/install_jetson_ort.py for why (GPU wheel selection needs the verified-profile gate; the
+# CPU fallback pin needs its own cp38-compatible version, since requirements.txt's onnxruntime pin
+# has no cp38 wheel at all -- see that file's own header comment).
+fastapi==0.124.4
+starlette==0.44.0
+uvicorn==0.33.0
+numpy==1.24.4
+pydantic==2.10.6
+httpx==0.28.1
+pyjwt==2.9.0
+cryptography==47.0.0
+redis==6.1.1

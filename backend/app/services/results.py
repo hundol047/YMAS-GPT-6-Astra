@@ -5,6 +5,12 @@ view. This is a pure read-side aggregation (same pattern as timeline.py/clinical
 no new storage, and none of the existing /patients/{pid}/lab-orders, /lab-results endpoints are
 removed or changed; this only adds a merged view on top of the same underlying data.
 """
+# Postpones annotation evaluation (PEP 563) so this module's `list[dict]` return-type hints -- valid
+# builtin-generic syntax only from Python 3.9 (PEP 585) -- never get evaluated at import time; this
+# module is plain internal functions (never a Pydantic model/dataclass whose type hints get
+# resolved at runtime), so deferring is sufficient to keep it importable on Python 3.8 too (Jetson
+# AGX Orin + JetPack 5.1.2), same technique already used in repositories.py/jetson_common.py.
+from __future__ import annotations
 
 
 def _flag(value, low, high):

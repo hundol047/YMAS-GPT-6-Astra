@@ -27,6 +27,33 @@
       "ort_candidate_id": null,
       "supported_providers": ["CPUExecutionProvider"],
       "notes": "Placeholder. Populate every null field from scripts/verify_jetson_agx_gpu.py's and scripts/detect_jetson_env.py's actual output on the target device -- do not fill in guessed version numbers."
+    },
+    {
+      "id": "agx-orin-jp512-cp38-environment-confirmed",
+      "verified": false,
+      "verified_on": null,
+      "hardware": "NVIDIA Jetson AGX Orin Developer Kit",
+      "jetpack": "5.1.2",
+      "l4t": "35.4.1",
+      "ubuntu": "20.04.6 LTS",
+      "python": "3.8.10",
+      "python_abi": "cp38",
+      "cuda": "11.4.19",
+      "cudnn": "8.6",
+      "tensorrt": "8.5.2.2",
+      "l4t_major": 35,
+      "cuda_major": 11,
+      "cuda_minor": 4,
+      "cudnn_major": 8,
+      "tensorrt_major": 8,
+      "tensorrt_minor": 5,
+      "arch": "aarch64",
+      "docker_base_image": null,
+      "onnxruntime_source": "Jetson-specific ARM64 GPU build (e.g. from the Jetson Zoo or NVIDIA's own ORT wheel for JetPack 5.1.2) -- never a generic x86 PyPI wheel",
+      "onnxruntime_version": null,
+      "ort_candidate_id": null,
+      "supported_providers": ["CPUExecutionProvider"],
+      "notes": "HARDWARE/SOFTWARE ENVIRONMENT ONLY -- these l4t_major/cuda_major/cuda_minor/cudnn_major/tensorrt_major/tensorrt_minor/python_abi/arch values are the ACTUAL values reported from a real Jetson AGX Orin Developer Kit running JetPack 5.1.2 (confirmed by a human operator, not guessed by this codebase). verified stays false and ort_candidate_id stays null because environment confirmation and GPU ONNX Runtime EXECUTION verification are two different things (see this file's _readme) -- no real GPU ORT wheel has been installed and execution-verified (scripts/verify_jetson_agx_gpu.py's EXECUTION_VERIFIED status, not just import/registration) on this exact device yet from this codebase's side. Once that happens for real, flip verified to true, set verified_on/onnxruntime_version, and link a filled-in config/jetson_ort_candidates.json entry via ort_candidate_id -- see scripts/capture_jetson_verified_profile.py's runtime/jetson_verified_profile.json output, which is written specifically to make that promotion reviewable rather than automatic. Until then, deploy_jetson_agx.sh correctly falls back to CPU Safe Mode on this environment even though the hardware/software identity matches exactly."
     }
   ],
   "selection_policy": "If the device's detected environment does not EXACTLY match (via scripts/jetson_common.profile_matches -- every one of l4t_major/cuda_major/cuda_minor/cudnn_major/tensorrt_major/tensorrt_minor/python_abi/arch must agree) any profile with verified=true, deploy_jetson_agx.sh must refuse to install a GPU wheel and instead run in CPU Safe Mode (CPUExecutionProvider only). Even a verified match with no resolvable ort_candidate_id still falls back to CPU. This file ships with zero verified profiles because no run against real AGX Orin hardware has happened from this development environment."

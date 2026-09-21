@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
+SCRIPTS = ROOT / "scripts"
 
 REQUIRED_PACKAGES = ["fastapi", "uvicorn", "onnxruntime", "numpy", "pydantic"]
 REQUIRED_FILES = [
@@ -37,9 +38,40 @@ def check(label, ok, detail=""):
     return ok
 
 
+def _detect_jetson_agx_orin_jetpack5_cp38():
+    """The ONLY exception to 'PC requires Python >= 3.10': a CONFIRMED Jetson AGX Orin running
+    JetPack 5 (L4T 35.x) on Python 3.8/cp38 -- see backend/requirements-jetpack5.txt and
+    docs/JETSON_DEPLOYMENT.md for why that's a real, hardware-detected compatibility path, not a
+    blanket 'Python 3.8 is fine everywhere' relaxation. A generic x86 PC that merely happens to run
+    Python 3.8 must still fail this check -- only real AGX Orin + JetPack 5 hardware qualifies.
+    Returns a dict with at least 'qualifies': bool; never raises (any detection failure -> False)."""
+    try:
+        sys.path.insert(0, str(SCRIPTS))
+        import jetson_common as jc
+        hw = jc.detect_hardware()
+        l4t = jc.classify_l4t_family(jc.read_file('/etc/nv_tegra_release'))
+        qualifies = (hw['hardware_is_agx_orin'] and l4t['jetpack_family'] == 'jetpack5'
+                     and sys.version_info[:2] == (3, 8))
+        return {'qualifies': qualifies, 'orin_family': hw['orin_family'],
+                'l4t_major': l4t['l4t_major'], 'jetpack_family': l4t['jetpack_family']}
+    except Exception as e:
+        return {'qualifies': False, 'error': str(e)}
+
+
 def check_python_version():
-    ok = sys.version_info >= (3, 10)
-    check("Python >= 3.10", ok, f"현재 {sys.version.split()[0]}")
+    if sys.version_info >= (3, 10):
+        check("Python >= 3.10 (PC 표준 경로)", True, f"현재 {sys.version.split()[0]}")
+        return
+    jp5 = _detect_jetson_agx_orin_jetpack5_cp38()
+    if jp5['qualifies']:
+        check("Python 3.8 (확인된 Jetson AGX Orin + JetPack 5 호환 경로)", True,
+              f"현재 {sys.version.split()[0]} on {jp5['orin_family']}, L4T {jp5['l4t_major']}, "
+              f"jetpack_family={jp5['jetpack_family']} -- backend/requirements-jetpack5.txt 사용")
+        return
+    check("Python >= 3.10 (또는 확인된 Jetson AGX Orin + JetPack 5 + Python 3.8)", False,
+          f"현재 {sys.version.split()[0]} -- 이 조합은 지원되지 않습니다. 일반 PC는 Python 3.10 이상이 "
+          f"필요하고, Python 3.8은 실제로 감지된 Jetson AGX Orin + JetPack 5 장비에서만 예외로 허용됩니다"
+          + (f" (감지 결과: {jp5})" if 'error' not in jp5 else ""))
 
 
 def check_files():
@@ -56,8 +88,17 @@ def check_packages(auto_install=False):
             missing.append(pkg)
     if missing and auto_install:
         print(f"\n미설치 패키지 설치 중: {missing}")
-        req = BACKEND / "requirements.txt"
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(req)])
+        jp5 = _detect_jetson_agx_orin_jetpack5_cp38()
+        if jp5['qualifies']:
+            # JetPack 5/cp38 path: core deps + the cp38-compatible CPU ONNX Runtime pin (never
+            # requirements.txt's onnxruntime==1.30.0, which has no cp38 wheel at all).
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r",
+                                    str(BACKEND / "requirements-jetpack5.txt")])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r",
+                                    str(BACKEND / "requirements-jetpack5-ort-cpu.txt")])
+        else:
+            req = BACKEND / "requirements.txt"
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(req)])
         for pkg in missing:
             check(f"재확인: {pkg}", importlib.util.find_spec(pkg) is not None)
     return missing

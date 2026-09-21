@@ -95,3 +95,31 @@ def test_capture_verified_profile_writes_a_reviewable_file_not_the_source_config
     # This is a scratch capture file, never the source config -- confirm nothing under config/ moved.
     profiles = json.loads((ROOT / 'config' / 'jetson_agx_orin_profiles.json').read_text(encoding='utf-8'))
     assert not any(p.get('verified') for p in profiles['profiles'])
+
+
+def test_deploy_script_help_documents_python_and_ort_wheel_overrides():
+    r = subprocess.run(['bash', str(ROOT / 'scripts' / 'deploy_jetson_agx.sh'), '--help'],
+                        capture_output=True, text=True, timeout=15)
+    assert r.returncode == 0, r.stderr
+    assert '--python /path/to/python' in r.stdout
+    assert '--ort-wheel' in r.stdout
+
+
+def test_deploy_script_rejects_unknown_option():
+    r = subprocess.run(['bash', str(ROOT / 'scripts' / 'deploy_jetson_agx.sh'), '--not-a-real-flag'],
+                        capture_output=True, text=True, timeout=15)
+    assert r.returncode != 0
+    assert 'Unknown option' in r.stdout
+
+
+def test_deploy_script_source_defines_jetpack5_branch_and_venv_robustness():
+    """Static check that the JetPack5/cp38 branch and the broken-venv recreate path are actually
+    wired into the script text (the functional end-to-end path needs aarch64 hardware this sandbox
+    doesn't have -- see docs/JETSON_DEPLOYMENT.md)."""
+    src = (ROOT / 'scripts' / 'deploy_jetson_agx.sh').read_text(encoding='utf-8')
+    assert 'requirements-jetpack5.txt' in src
+    assert 'requirements-jetpack5-ort-cpu.txt' in src
+    assert 'jetpack5' in src and 'cp38' in src
+    assert 'create_or_repair_venv' in src
+    assert 'ensurepip' in src
+    assert 'SYNEX_ORT_WHEEL' in src

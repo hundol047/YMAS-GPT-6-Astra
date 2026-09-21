@@ -6,6 +6,8 @@ entries). No new storage, nothing fabricated -- every entry traces back to a rea
 Workspace round -- e.g. the demo seed data's dated Lab entries) are folded in too so older data
 still shows up instead of only records created through the new endpoints.
 """
+from typing import Dict, List
+
 FILTER_TYPES = ['encounter', 'diagnosis', 'medication', 'lab', 'note', 'imaging', 'ai_warning']
 
 
@@ -13,7 +15,7 @@ def _event(type_, timestamp, title, detail='', source_id=None):
     return {'type': type_, 'timestamp': str(timestamp), 'title': title, 'detail': detail, 'source_id': source_id}
 
 
-def build_timeline(patient, *, note_repo, medication_order_repo, lab_order_repo) -> list[dict]:
+def build_timeline(patient, *, note_repo, medication_order_repo, lab_order_repo) -> List[Dict]:
     events = []
 
     for e in patient.clinical_encounters:
@@ -78,7 +80,7 @@ def build_timeline(patient, *, note_repo, medication_order_repo, lab_order_repo)
     return events
 
 
-def with_ai_warnings(events: list[dict], audit_events: list[dict]) -> list[dict]:
+def with_ai_warnings(events: List[Dict], audit_events: List[Dict]) -> List[Dict]:
     """Merge in AI Warning entries from the real audit log (alert_detected/cds_hook_fired) --
     kept as a separate step from build_timeline() so callers without an AuditStore handy (e.g.
     tests exercising pure repository state) can still get the rest of the timeline."""

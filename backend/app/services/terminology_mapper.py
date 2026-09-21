@@ -11,7 +11,7 @@ rows to these tables (ideally sourced from a real RxNorm/LOINC/ICD-10 terminolog
 inferring a code from the drug name at runtime.
 """
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 MappingStatus = Literal['mapped', 'partial', 'unmapped', 'ambiguous']
 
@@ -123,7 +123,7 @@ def normalize_lab(name: str) -> NormalizedCode:
     return NormalizedCode('synexagent:lab-name', name, name, 'LOINC', code, display, 'mapped')
 
 
-def normalize_condition(text: str) -> list[NormalizedCode]:
+def normalize_condition(text: str) -> List[NormalizedCode]:
     row = ICD10_SNOMED_BY_CONDITION.get(text)
     if not row:
         return [NormalizedCode('synexagent:condition-text', text, text, mapping_status='unmapped',
