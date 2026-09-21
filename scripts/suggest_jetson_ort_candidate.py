@@ -25,8 +25,10 @@ import jetson_common as jc
 def detected_environment(python_bin: str) -> dict:
     hw = jc.detect_hardware()
     l4t = jc.classify_l4t_family(jc.read_file('/etc/nv_tegra_release'))
-    nvcc = jc.run(['nvcc', '--version'])
-    cuda = jc.classify_cuda_family(jc.extract_cuda_version_from_nvcc(nvcc))
+    # See jc.collect_cuda_version()'s docstring: shared across every Jetson script so none of them
+    # can disagree about CUDA version on the same real hardware (nvcc-only detection previously
+    # reported null on a device where nvcc simply wasn't on PATH but CUDA was genuinely installed).
+    cuda = jc.classify_cuda_family(jc.collect_cuda_version()['cuda_version'])
     cudnn_major = jc.extract_cudnn_major(jc.run(['bash', '-c', 'dpkg -l | grep -i cudnn || true']))
     trt = jc.extract_tensorrt_version(jc.run(['bash', '-c', "dpkg -l | grep -E 'tensorrt|libnvinfer' || true"]))
     return {

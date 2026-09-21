@@ -3,14 +3,14 @@ hardware) -- the one thing they can prove from here is that hardware detection a
 Mode fallback are correct, since that's the actual environment available. They do not and cannot
 prove GPU acceleration works; that needs a real Jetson AGX Orin.
 """
-import json, subprocess, sys
+import json, os, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-def run_script(name, *args):
+def run_script(name, *args, env=None):
     return subprocess.run([sys.executable, str(ROOT / 'scripts' / name), *args],
-                          capture_output=True, text=True, timeout=30)
+                          capture_output=True, text=True, timeout=30, env=env)
 
 def test_verify_script_reports_non_jetson_hardware_honestly():
     r = run_script('verify_jetson_agx_gpu.py', '--provider', 'cpu')
@@ -123,3 +123,94 @@ def test_deploy_script_source_defines_jetpack5_branch_and_venv_robustness():
     assert 'create_or_repair_venv' in src
     assert 'ensurepip' in src
     assert 'SYNEX_ORT_WHEEL' in src
+
+
+# --- ORT native-crash isolation: scripts/ort_smoke_test.py + verify_jetson_agx_gpu.py's gate ------
+
+def test_ort_smoke_test_script_succeeds_on_a_working_onnxruntime():
+    r = run_script('ort_smoke_test.py')
+    assert r.returncode == 0, r.stderr
+    line = json.loads(r.stdout.strip().splitlines()[-1])
+    assert line['stage'] == 'import' and line['ok'] is True
+    assert 'CPUExecutionProvider' in line['providers']
+
+def test_ort_smoke_test_script_full_mode_loads_model_and_runs_inference():
+    env = dict(os.environ, SYNEX_PROVIDER='cpu')
+    r = run_script('ort_smoke_test.py', '--full', env=env)
+    assert r.returncode == 0, r.stderr
+    lines = [json.loads(l) for l in r.stdout.strip().splitlines()]
+    stages = [l['stage'] for l in lines]
+    assert stages == ['import', 'model_load', 'inference']
+    assert all(l['ok'] for l in lines)
+    assert 0 <= lines[-1]['risk_probability'] <= 1
+
+
+def _fake_crashing_onnxruntime_pythonpath(tmp_path):
+    """Writes a fake `onnxruntime` module that prints the real ort_smoke_test.py 'import' stage
+    marker and then os.abort()s -- simulating the EXACT real failure confirmed on a Jetson AGX Orin
+    + JetPack 5.1.2 device (a C++ assertion inside the installed wheel -> SIGABRT -> "Aborted (core
+    dumped)"), so this test exercises the real subprocess-classification path against a real OS-level
+    signal kill, not just a hand-constructed returncode."""
+    fake_dir = tmp_path / 'fake_ort_site'
+    fake_dir.mkdir()
+    (fake_dir / 'onnxruntime.py').write_text(
+        'import json, os\n'
+        'print(json.dumps({"stage": "import", "ok": True, "version": "1.19.2-fake", '
+        '"providers": ["CPUExecutionProvider"]}), flush=True)\n'
+        'os.abort()\n'
+    )
+    return fake_dir
+
+
+def test_ort_smoke_test_script_itself_gets_killed_by_a_real_native_crash(tmp_path):
+    fake_dir = _fake_crashing_onnxruntime_pythonpath(tmp_path)
+    env = dict(os.environ)
+    env['PYTHONPATH'] = str(fake_dir) + os.pathsep + env.get('PYTHONPATH', '')
+    r = run_script('ort_smoke_test.py', env=env)
+    assert r.returncode != 0
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    import jetson_common as jc
+    assert jc.classify_subprocess_termination(r.returncode) == 'NATIVE_CRASH'
+
+
+def test_verify_jetson_agx_gpu_isolates_a_native_ort_crash_and_never_runs_inference(tmp_path):
+    """End-to-end: verify_jetson_agx_gpu.py must run its ORT smoke test in an isolated subprocess
+    FIRST, detect the crash, exit with its dedicated exit code (3), and report
+    ORT_NATIVE_RUNTIME_CRASH -- never attempting (and thereby never itself crashing from) the
+    in-process RiskEngine/inference path that onnxruntime_report() would otherwise run."""
+    fake_dir = _fake_crashing_onnxruntime_pythonpath(tmp_path)
+    env = dict(os.environ)
+    env['PYTHONPATH'] = str(fake_dir) + os.pathsep + env.get('PYTHONPATH', '')
+    r = run_script('verify_jetson_agx_gpu.py', '--provider', 'cpu', env=env)
+    assert r.returncode == 3, f'expected the dedicated ORT-smoke-test-failure exit code; got {r.returncode}, stderr={r.stderr}'
+    body = json.loads(r.stdout)
+    assert body['onnxruntime']['status'] == 'ORT_NATIVE_RUNTIME_CRASH'
+    assert body['ort_smoke_test']['status'] == 'ORT_NATIVE_RUNTIME_CRASH'
+    assert body['ort_smoke_test']['last_stage_completed'] == 'import'
+    # The crash must be reported plainly, never mislabeled as a GPU/CPU equivalence problem.
+    assert 'equivalence' not in json.dumps(body).lower()
+    assert 'ORT_NATIVE_RUNTIME_CRASH' in r.stderr
+
+
+def test_deploy_script_stops_before_step_10_equivalence_on_a_verify_exit_code_3():
+    """Static/control-flow check that deploy_jetson_agx.sh actually stops (exit 6) on
+    verify_jetson_agx_gpu.py's dedicated crash exit code (3) BEFORE it ever reaches step 10's
+    compare_cpu_gpu_results.py invocation -- the real end-to-end path needs a full venv+pip install
+    cycle this sandbox's non-aarch64/no-Jetson environment can't meaningfully exercise, so this
+    verifies the actual control flow in the script text: the `VERIFY_RC = 3` branch's `exit 6`
+    appears strictly before the `compare_cpu_gpu_results.py` call, in the same unconditional
+    top-level sequence (not nested inside something that could be skipped)."""
+    src = (ROOT / 'scripts' / 'deploy_jetson_agx.sh').read_text(encoding='utf-8')
+    verify_rc_check = src.index('VERIFY_RC" = "3"')
+    exit_6_after_crash = src.index('exit 6', verify_rc_check)
+    compare_call = src.index('compare_cpu_gpu_results.py')
+    assert verify_rc_check < exit_6_after_crash < compare_call, (
+        'deploy_jetson_agx.sh must check verify_jetson_agx_gpu.py\'s crash exit code and exit '
+        'BEFORE calling compare_cpu_gpu_results.py -- otherwise a native crash in step 8-9 can '
+        'still reach step 10 and get mislabeled as a CPU/GPU equivalence failure'
+    )
+    # The crash-specific exit must not be gated behind anything that could make it optional --
+    # confirm it's inside the same `if [ "$VERIFY_RC" = "3" ]` block, not merely present somewhere
+    # later in the file by coincidence.
+    between = src[verify_rc_check:exit_6_after_crash]
+    assert 'compare_cpu_gpu_results.py' not in between

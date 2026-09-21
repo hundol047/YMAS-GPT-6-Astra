@@ -19,12 +19,36 @@ could actually observe on the machine it ran on.
 Usage: python3 scripts/verify_jetson_agx_gpu.py [--provider cpu|cuda|tensorrt] [--allow-other-orin]
                                                  [--base-url http://127.0.0.1:8000]
 """
-import argparse, json, sys, time
+import argparse, json, os, subprocess, sys, time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 import jetson_common as jc
+
+ORT_SMOKE_TEST_SCRIPT = Path(__file__).resolve().parent / 'ort_smoke_test.py'
+
+
+def ort_smoke_test_report(requested_provider, timeout=120):
+    """Runs scripts/ort_smoke_test.py --full as an ISOLATED subprocess before this script ever
+    imports onnxruntime itself in-process -- a native ORT crash (confirmed for real on Jetson AGX
+    Orin + JetPack 5.1.2 with the generic PyPI CPU onnxruntime==1.19.2 wheel) must never take this
+    verification script down with it. See jetson_common.classify_ort_smoke_test for how the
+    (returncode, stdout) pair becomes one of DEPLOYMENT_FAILURE_STATUSES or 'OK'."""
+    env = dict(os.environ)
+    env['SYNEX_PROVIDER'] = requested_provider
+    try:
+        r = subprocess.run([sys.executable, str(ORT_SMOKE_TEST_SCRIPT), '--full'],
+                            capture_output=True, text=True, env=env, timeout=timeout)
+        result = jc.classify_ort_smoke_test(r.returncode, r.stdout)
+        result['returncode'] = r.returncode
+        result['stderr'] = r.stderr[-4000:]
+        return result
+    except subprocess.TimeoutExpired:
+        # Distinct from ORT_NATIVE_RUNTIME_CRASH -- a hang is not a crash (the process is stuck, not
+        # dead), but it must still never be silently ignored or misreported as some other status.
+        return {'status': 'ORT_SMOKE_TEST_TIMEOUT', 'last_stage_completed': None, 'stages': [],
+                'returncode': None, 'stderr': f'ort_smoke_test.py did not finish within {timeout}s'}
 
 
 def detect_hardware(allow_other_orin):
@@ -34,12 +58,15 @@ def detect_hardware(allow_other_orin):
 
 def detect_cuda_stack():
     nv_tegra_release = jc.read_file('/etc/nv_tegra_release')
-    nvcc_out = jc.run(['nvcc', '--version'])
+    # See jc.collect_cuda_version()'s docstring: shared across every Jetson script so none of them
+    # can disagree about CUDA version on the same real hardware.
+    cuda_detection = jc.collect_cuda_version()
     return {
         'python_version': sys.version.split()[0],
-        'nvcc_version': nvcc_out,
+        'nvcc_version': cuda_detection['nvcc_version_raw'],
         'l4t': jc.classify_l4t_family(nv_tegra_release),
-        'cuda': jc.classify_cuda_family(jc.extract_cuda_version_from_nvcc(nvcc_out)),
+        'cuda': jc.classify_cuda_family(cuda_detection['cuda_version']),
+        'cuda_version_source': cuda_detection['cuda_version_source'],
         'cudnn_packages': jc.run(['bash', '-c', "dpkg -l | grep -i cudnn || true"]),
         'tensorrt_packages': jc.run(['bash', '-c', "dpkg -l | grep -E 'tensorrt|libnvinfer' || true"]),
         'docker_version': jc.run(['docker', '--version']),
@@ -214,12 +241,39 @@ if __name__ == '__main__':
     ap.add_argument('--allow-other-orin', action='store_true')
     ap.add_argument('--base-url', default=None, help='If given (or reachable at http://127.0.0.1:8000), also runs real /health, /predict, /agent/analyze checks against it')
     args = ap.parse_args()
+
+    # ISOLATED smoke test FIRST, in its own subprocess -- before this script ever imports
+    # onnxruntime in-process for onnxruntime_report() below. A native ORT crash here means
+    # onnxruntime_report() (which builds a RiskEngine and runs real inference in-process) is never
+    # even attempted -- it would just crash the same way, taking this whole script down with it.
+    smoke = ort_smoke_test_report(args.provider)
     report = {
         'hardware': detect_hardware(args.allow_other_orin),
         'cuda_stack': detect_cuda_stack(),
         'tensorrt_python': detect_tensorrt_python(),
-        'onnxruntime': onnxruntime_report(args.provider),
+        'ort_smoke_test': smoke,
     }
+    if smoke['status'] != 'OK':
+        report['onnxruntime'] = {
+            'status': smoke['status'],
+            'requested_provider': jc.PROVIDER_NAMES.get(args.provider),
+            'gpu_acceleration_verified': False,
+            'reason': (f"ort_smoke_test.py (isolated subprocess) did not complete cleanly: "
+                       f"status={smoke['status']}, last_stage_completed={smoke['last_stage_completed']!r}. "
+                       'In-process inference/verification was NOT attempted -- see stderr below.'),
+            'stderr': smoke.get('stderr', ''),
+        }
+        report['api'] = {'base_url': None, 'health': None, 'predict': None, 'agent_analyze': None,
+                          'reachable': False, 'error': 'skipped: ort_smoke_test did not complete cleanly'}
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        print(f"ORT SMOKE TEST: {smoke['status']} (last_stage_completed={smoke['last_stage_completed']!r}) "
+              '-- stopping before any in-process ONNX Runtime use. See stderr above/below for the raw crash output.',
+              file=sys.stderr)
+        if smoke.get('stderr'):
+            print(smoke['stderr'], file=sys.stderr)
+        sys.exit(3)
+
+    report['onnxruntime'] = onnxruntime_report(args.provider)
     base_url = args.base_url
     if base_url is None:
         # Opportunistically check the conventional default -- if nothing is listening there this

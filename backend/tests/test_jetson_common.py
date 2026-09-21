@@ -355,3 +355,135 @@ def test_generate_jetson_report_leaves_clean_data_alone():
     import generate_jetson_report as gjr
     clean = {'providers': ['CPUExecutionProvider'], 'patient': 'SYN-002'}
     assert gjr.scrub_for_report(clean) == clean
+
+
+# --- CUDA version detection fallback chain (real bug: nvcc missing from PATH on a real Jetson AGX
+# Orin + JetPack 5.1.2 device even though CUDA 11.4.19 was genuinely installed -- install_jetson_ort.py
+# used to only try nvcc, reporting cuda_major/cuda_minor: null while detect_jetson_env.py's
+# version.json fallback correctly found 11.4 on the SAME hardware) -----------------------------------
+
+def test_cuda_detected_via_nvcc_when_available():
+    result = jc.detect_cuda_version_string(nvcc_output='nvcc: NVIDIA (R) Cuda compiler driver\nRelease 11.4, V11.4.166')
+    assert result == {'cuda_version': '11.4', 'cuda_version_source': 'nvcc'}
+
+def test_cuda_nvcc_absent_falls_back_to_version_json():
+    result = jc.detect_cuda_version_string(nvcc_output=None, cuda_version_json_text='{"cuda": {"version": "11.4.19"}}')
+    assert result == {'cuda_version': '11.4', 'cuda_version_source': 'version.json'}
+
+def test_cuda_nvcc_and_json_absent_falls_back_to_version_txt():
+    result = jc.detect_cuda_version_string(nvcc_output=None, cuda_version_json_text=None,
+                                            cuda_version_txt_text='CUDA Version 11.4.19')
+    assert result == {'cuda_version': '11.4', 'cuda_version_source': 'version.txt'}
+
+def test_cuda_nvcc_json_and_txt_absent_falls_back_to_dpkg():
+    dpkg_output = 'ii  cuda-toolkit-11-4  11.4.19-1  arm64  CUDA Toolkit 11.4'
+    result = jc.detect_cuda_version_string(nvcc_output=None, cuda_version_json_text=None,
+                                            cuda_version_txt_text=None, dpkg_cuda_output=dpkg_output)
+    assert result == {'cuda_version': '11.4', 'cuda_version_source': 'dpkg'}
+
+def test_cuda_completely_undetectable_stays_null_never_guessed():
+    result = jc.detect_cuda_version_string(nvcc_output=None, cuda_version_json_text=None,
+                                            cuda_version_txt_text=None, dpkg_cuda_output=None)
+    assert result == {'cuda_version': None, 'cuda_version_source': None}
+
+def test_cuda_fallback_chain_prefers_earlier_sources_over_later_ones():
+    # nvcc wins even when other sources also have (deliberately different, to prove precedence) data.
+    result = jc.detect_cuda_version_string(
+        nvcc_output='Release 11.4, V11.4.166',
+        cuda_version_json_text='{"cuda": {"version": "99.9.9"}}',
+        cuda_version_txt_text='CUDA Version 99.9.9',
+        dpkg_cuda_output='ii  cuda-toolkit-99-9  99.9.9-1  arm64  CUDA Toolkit 99.9',
+    )
+    assert result == {'cuda_version': '11.4', 'cuda_version_source': 'nvcc'}
+
+
+# --- Distinguishing a native ONNX Runtime crash from an ordinary Python exception -------------------
+
+def test_classify_subprocess_termination_ok_for_zero_returncode():
+    assert jc.classify_subprocess_termination(0) == 'OK'
+
+def test_classify_subprocess_termination_python_exception_for_positive_returncode():
+    assert jc.classify_subprocess_termination(1) == 'PYTHON_EXCEPTION'
+
+def test_classify_subprocess_termination_native_crash_for_negative_returncode():
+    # subprocess.run's .returncode is negative == -signal_number when killed by a signal (e.g. -6 for
+    # SIGABRT/abort(), the exact signal behind the real "Aborted (core dumped)" ORT crash).
+    assert jc.classify_subprocess_termination(-6) == 'NATIVE_CRASH'
+    assert jc.classify_subprocess_termination(-11) == 'NATIVE_CRASH'
+
+def test_ort_smoke_test_success_classified_ok():
+    stdout = '{"stage": "import", "ok": true, "version": "1.19.2", "providers": ["CPUExecutionProvider"]}\n'
+    result = jc.classify_ort_smoke_test(0, stdout)
+    assert result['status'] == 'OK'
+    assert result['last_stage_completed'] == 'import'
+
+def test_ort_smoke_test_full_success_classified_ok():
+    stdout = (
+        '{"stage": "import", "ok": true, "version": "1.19.2", "providers": ["CPUExecutionProvider"]}\n'
+        '{"stage": "model_load", "ok": true, "model_sha256": "abc", "session_providers": ["CPUExecutionProvider"]}\n'
+        '{"stage": "inference", "ok": true, "risk_probability": 0.42}\n'
+    )
+    result = jc.classify_ort_smoke_test(0, stdout)
+    assert result['status'] == 'OK'
+    assert result['last_stage_completed'] == 'inference'
+
+def test_ort_smoke_test_python_exception_before_any_stage_is_import_failed():
+    # e.g. `import onnxruntime` itself raised ImportError -- no stage marker ever printed.
+    result = jc.classify_ort_smoke_test(1, '')
+    assert result['status'] == 'ORT_IMPORT_FAILED'
+    assert result['last_stage_completed'] is None
+
+def test_ort_smoke_test_exception_after_import_but_before_model_load_is_model_load_failed():
+    stdout = '{"stage": "import", "ok": true, "version": "1.19.2", "providers": ["CPUExecutionProvider"]}\n'
+    result = jc.classify_ort_smoke_test(1, stdout)
+    assert result['status'] == 'MODEL_LOAD_FAILED'
+    assert result['last_stage_completed'] == 'import'
+
+def test_ort_smoke_test_exception_after_model_load_but_before_inference_is_inference_failed():
+    stdout = (
+        '{"stage": "import", "ok": true, "version": "1.19.2", "providers": ["CPUExecutionProvider"]}\n'
+        '{"stage": "model_load", "ok": true, "model_sha256": "abc", "session_providers": ["CPUExecutionProvider"]}\n'
+    )
+    result = jc.classify_ort_smoke_test(1, stdout)
+    assert result['status'] == 'INFERENCE_FAILED'
+    assert result['last_stage_completed'] == 'model_load'
+
+def test_ort_smoke_test_sigabrt_after_import_is_native_crash_not_a_python_exception():
+    # This is the real, confirmed failure mode: the process printed the "import" marker, then a C++
+    # assertion inside the installed ORT wheel aborted the whole process (SIGABRT, "Aborted (core
+    # dumped)") -- never conflated with an ordinary Python exception or (worse) silently reported as
+    # a CPU/GPU equivalence mismatch, since equivalence testing never even started.
+    stdout = '{"stage": "import", "ok": true, "version": "1.19.2", "providers": ["CPUExecutionProvider"]}\n'
+    result = jc.classify_ort_smoke_test(-6, stdout)
+    assert result['status'] == 'ORT_NATIVE_RUNTIME_CRASH'
+    assert result['last_stage_completed'] == 'import'
+
+def test_ort_smoke_test_sigsegv_before_any_stage_is_native_crash_not_import_failed():
+    # A crash so early no stage marker was even printed must still be classified as a crash (via the
+    # negative returncode), never conflated with ORT_IMPORT_FAILED (which implies a clean Python
+    # exception, not a signal kill).
+    result = jc.classify_ort_smoke_test(-11, '')
+    assert result['status'] == 'ORT_NATIVE_RUNTIME_CRASH'
+    assert result['last_stage_completed'] is None
+
+def test_ort_smoke_test_real_subprocess_crash_end_to_end(tmp_path):
+    """A REAL subprocess (not a synthetic returncode) that prints the import marker and then calls
+    os.abort() -- proving classify_ort_smoke_test works against an actual OS-level signal kill, not
+    just a hand-constructed negative integer."""
+    import subprocess
+    code = (
+        'import json; print(json.dumps({"stage": "import", "ok": True, '
+        '"version": "1.19.2-fake", "providers": ["CPUExecutionProvider"]}), flush=True)\n'
+        'import os; os.abort()\n'
+    )
+    r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
+    assert r.returncode < 0, 'expected this subprocess to be killed by a signal'
+    result = jc.classify_ort_smoke_test(r.returncode, r.stdout)
+    assert result['status'] == 'ORT_NATIVE_RUNTIME_CRASH'
+    assert result['last_stage_completed'] == 'import'
+
+def test_ort_smoke_test_never_reports_cpu_gpu_mismatch():
+    # CPU_GPU_MISMATCH belongs only to compare_cpu_gpu_results.py, once both sides of a real
+    # comparison actually completed -- classify_ort_smoke_test must never produce it under any input.
+    for returncode, stdout in [(0, ''), (1, ''), (-6, ''), (0, '{"stage": "inference", "ok": true}\n')]:
+        assert jc.classify_ort_smoke_test(returncode, stdout)['status'] != 'CPU_GPU_MISMATCH'

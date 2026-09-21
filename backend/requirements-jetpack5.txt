@@ -26,6 +26,13 @@ starlette==0.44.0
 uvicorn==0.33.0
 numpy==1.24.4
 pydantic==2.10.6
+# schemas.py imports Annotated from typing_extensions (not stdlib typing, which only gained
+# Annotated in Python 3.9 -- confirmed as a real ImportError on this exact device). Pinned
+# explicitly rather than relying on it only being pulled in transitively by pydantic, since it's
+# directly imported by our own source. 4.13.2 is the last typing_extensions release whose own PyPI
+# metadata still declares Python 3.8 support, and satisfies pydantic==2.10.6's own
+# typing-extensions>=4.12.2 requirement.
+typing_extensions==4.13.2
 httpx==0.28.1
 pyjwt==2.9.0
 cryptography==47.0.0

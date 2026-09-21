@@ -35,8 +35,12 @@ def detected_environment(python_bin: str) -> dict:
     TARGET python's ABI (python_abi_of(python_bin)), not this script's own interpreter."""
     hw = jc.detect_hardware()
     l4t = jc.classify_l4t_family(jc.read_file('/etc/nv_tegra_release'))
-    nvcc = jc.run(['nvcc', '--version'])
-    cuda = jc.classify_cuda_family(jc.extract_cuda_version_from_nvcc(nvcc))
+    # Shared with detect_jetson_env.py (jc.collect_cuda_version) -- this used to call ONLY
+    # `nvcc --version` with no fallback, which on a real Jetson AGX Orin + JetPack 5.1.2 device
+    # where `nvcc` wasn't on this shell's PATH (CUDA 11.4.19 was genuinely installed) produced
+    # cuda_major/cuda_minor: null here while detect_jetson_env.py's version.json fallback correctly
+    # found 11.4 -- the two scripts disagreeing about the same real hardware. Never divergent now.
+    cuda = jc.classify_cuda_family(jc.collect_cuda_version()['cuda_version'])
     cudnn_major = jc.extract_cudnn_major(jc.run(['bash', '-c', 'dpkg -l | grep -i cudnn || true']))
     trt = jc.extract_tensorrt_version(jc.run(['bash', '-c', "dpkg -l | grep -E 'tensorrt|libnvinfer' || true"]))
     return {

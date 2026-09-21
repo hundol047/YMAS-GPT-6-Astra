@@ -69,7 +69,15 @@ Usage: bash scripts/deploy_jetson_agx.sh [options]
   --ort-wheel /path/to/verified.whl   Install THIS specific, already-verified ONNX Runtime wheel
                           instead of consulting config/jetson_ort_candidates.json. Use this once you
                           have obtained and confirmed a real GPU ORT wheel for this exact device
-                          (see docs/JETSON_DEPLOYMENT.md) -- never a guessed or unconfirmed URL.
+                          (see docs/JETSON_DEPLOYMENT.md) -- never a guessed or unconfirmed URL. On
+                          JetPack 5, this is the PREFERRED path for a working ORT install: the
+                          generic PyPI ARM64 CPU wheel (requirements-jetpack5-ort-cpu.txt) is not
+                          assumed unconditionally safe there -- it native-crashed on real AGX Orin
+                          + JetPack 5.1.2 hardware -- so a Jetson-specific build (this device's own
+                          source build, or an NVIDIA-provided ARM64 wheel) is preferred once you
+                          have one. Either way, whatever gets installed is only ever trusted after
+                          scripts/ort_smoke_test.py (an isolated subprocess) confirms it actually
+                          imports and runs without crashing -- never on installation success alone.
                           Same effect as setting SYNEX_ORT_WHEEL in the environment.
   -h, --help              This message.
 EOF
@@ -209,6 +217,11 @@ cpu_ort_pin() {
 }
 
 echo "== Step 7/20: ONNX Runtime installation matching the detected environment =="
+# NOTE: whichever branch below installs a CPU-only onnxruntime pin, that install is NOT the finish
+# line -- step 8-9 always runs it through scripts/ort_smoke_test.py in an isolated subprocess before
+# trusting it for anything. The generic PyPI ARM64 CPU wheel native-crashed for real on a Jetson AGX
+# Orin + JetPack 5.1.2 device (see requirements-jetpack5-ort-cpu.txt's header) -- "pip install
+# succeeded" is never treated as "this wheel actually works on this device".
 EFFECTIVE_PROVIDER="cpu"
 GPU_INSTALL_STATUS="not_attempted"
 if [ "$PROVIDER" = "cpu" ]; then
@@ -289,28 +302,64 @@ else
 fi
 echo "requested SYNEX_PROVIDER=$EFFECTIVE_PROVIDER (auto lets RiskEngine cascade tensorrt->cuda->cpu)"
 
-echo "== Step 8-9/20: Provider + real inference + profiling-based node execution verification (no server needed yet) =="
+echo "== Step 8-9/20: ISOLATED ORT smoke test -> provider enumeration -> model load -> one inference -> profiling =="
 "$PY" -m pip install -q httpx==0.28.1
+# verify_jetson_agx_gpu.py itself now runs scripts/ort_smoke_test.py as an ISOLATED subprocess
+# FIRST, before ever importing onnxruntime in-process -- exactly the order this step's name
+# describes (import smoke test -> provider enumeration -> model load -> one inference -> profiling).
+# A native ORT crash there (confirmed for real on Jetson AGX Orin + JetPack 5.1.2 with the generic
+# PyPI CPU onnxruntime==1.19.2 wheel: SIGABRT / "Aborted (core dumped)") makes verify_jetson_agx_gpu.py
+# exit 3 -- NEVER treated the same as an ordinary failure, and NEVER silently swallowed with `|| true`
+# the way earlier revisions of this script did (which is exactly what let a crash here get relabeled
+# "CPU/GPU result equivalence FAILED" by step 10, even though step 10 never even started).
 # stdout (the JSON report) and stderr (the human-readable summary/notes) are captured separately --
 # merging them would produce a file that's neither valid JSON nor readable text.
+set +e
 "$PY" scripts/verify_jetson_agx_gpu.py --provider "$EFFECTIVE_PROVIDER" $ALLOW_FLAG \
-  > "$RUNTIME_DIR/verify_report.json" 2> "$RUNTIME_DIR/verify_report.stderr.log" || true
+  > "$RUNTIME_DIR/verify_report.json" 2> "$RUNTIME_DIR/verify_report.stderr.log"
+VERIFY_RC=$?
+set -e
 cat "$RUNTIME_DIR/verify_report.stderr.log" >&2
 cat "$RUNTIME_DIR/verify_report.json"
+if [ "$VERIFY_RC" = "3" ]; then
+  ORT_STATUS=$(python3 -c "import json;print(json.load(open('$RUNTIME_DIR/verify_report.json'))['onnxruntime']['status'])" 2>/dev/null || echo "UNKNOWN")
+  echo ""
+  echo "DEPLOYMENT STATUS: $ORT_STATUS -- stopping BEFORE the CPU/GPU equivalence step (step 10 never ran)."
+  echo "This is a real ONNX Runtime failure (see $RUNTIME_DIR/verify_report.stderr.log for the raw"
+  echo "crash/exception output), never mislabeled as an equivalence mismatch -- equivalence testing"
+  echo "requires a working provider on both sides, which this environment does not currently have."
+  exit 6
+elif [ "$VERIFY_RC" != "0" ]; then
+  echo "verify_jetson_agx_gpu.py exited $VERIFY_RC (not the ORT-smoke-test-specific exit 3) -- treating as a general verification failure."
+  exit "$VERIFY_RC"
+fi
 
 echo "== Step 10/20: CPU/GPU result equivalence check (SYN-001..005) =="
-# A GPU deployment is never reported as successful if its actual numeric/classification output
-# diverges from the CPU baseline beyond the tolerance compare_cpu_gpu_results.py defines -- this is
-# never skipped just because it might fail; failing HERE means the GPU deployment itself failed, not
-# that this check was optional.
+# Only ever reached once step 8-9's isolated ORT smoke test AND the full in-process verification
+# both actually succeeded -- a real provider produced a real result on at least the CPU side before
+# this comparison is even attempted. A GPU deployment is never reported as successful if its actual
+# numeric/classification output diverges from the CPU baseline beyond the tolerance
+# compare_cpu_gpu_results.py defines -- this is never skipped just because it might fail; failing
+# HERE means the GPU deployment itself failed (CPU_GPU_MISMATCH), not that this check was optional.
 set +e
 "$PY" scripts/compare_cpu_gpu_results.py > "$RUNTIME_DIR/cpu_gpu_comparison.json" 2>"$RUNTIME_DIR/cpu_gpu_comparison.stderr.log"
 COMPARISON_RC=$?
 set -e
 cat "$RUNTIME_DIR/cpu_gpu_comparison.stderr.log" >&2
 cat "$RUNTIME_DIR/cpu_gpu_comparison.json"
-if [ "$COMPARISON_RC" != "0" ]; then
-  echo "CPU/GPU result equivalence FAILED for a provider that was actually used -- this deployment is NOT successful (see $RUNTIME_DIR/cpu_gpu_comparison.json)."
+if [ "$COMPARISON_RC" -ge 128 ]; then
+  # A shell exit code >=128 means the process was killed by signal (COMPARISON_RC - 128) -- e.g. 134
+  # = SIGABRT, 139 = SIGSEGV. This is the same native-crash failure mode as step 8-9, just caught
+  # here as defense in depth (compare_cpu_gpu_results.py also builds real ORT sessions in-process,
+  # for both the CPU baseline and any available GPU candidate) -- reported as a crash, never as
+  # "CPU/GPU result equivalence FAILED", since equivalence was never actually compared.
+  SIGNAL_NUM=$((COMPARISON_RC - 128))
+  echo ""
+  echo "DEPLOYMENT STATUS: ORT_NATIVE_RUNTIME_CRASH -- compare_cpu_gpu_results.py was killed by signal $SIGNAL_NUM (exit $COMPARISON_RC)."
+  echo "This is a native ONNX Runtime crash during the equivalence check itself, never mislabeled as a mismatch."
+  exit 6
+elif [ "$COMPARISON_RC" != "0" ]; then
+  echo "DEPLOYMENT STATUS: CPU_GPU_MISMATCH -- a provider that was actually used produced results that diverge from the CPU baseline beyond tolerance (see $RUNTIME_DIR/cpu_gpu_comparison.json). This deployment is NOT successful."
   exit 5
 fi
 

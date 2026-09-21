@@ -1,4 +1,11 @@
-from typing import Annotated, Literal, Optional, List
+from typing import Literal, Optional, List
+# Annotated was only added to the stdlib `typing` module in Python 3.9 (PEP 593) -- Jetson AGX Orin
+# + JetPack 5.1.2 ships Python 3.8.10, where `from typing import Annotated` raises
+# `ImportError: cannot import name 'Annotated' from 'typing'` (confirmed on real hardware).
+# typing_extensions backports it identically for 3.8+ and is already a hard dependency of pydantic
+# itself (>=4.12.2, both here and in backend/requirements-jetpack5.txt), so this works unchanged on
+# both the PC (>=3.10) and JetPack5 (3.8) paths -- never a conditional/try-except import.
+from typing_extensions import Annotated
 from datetime import date
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 

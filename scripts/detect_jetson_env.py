@@ -25,14 +25,14 @@ def detect_nvidia_stack():
     nv_tegra_release = jc.read_file('/etc/nv_tegra_release')
     l4t_core = jc.run(['dpkg-query', '-W', 'nvidia-l4t-core'])
     jetpack_pkg = jc.run(['bash', '-c', 'dpkg -l | grep -i nvidia-jetpack || true'])
-    nvcc_out = jc.run(['nvcc', '--version'])
-    cuda_version_json = jc.read_file('/usr/local/cuda/version.json')
-    cuda_version_str = jc.extract_cuda_version_from_nvcc(nvcc_out)
-    if not cuda_version_str and cuda_version_json:
-        try:
-            cuda_version_str = json.loads(cuda_version_json).get('cuda', {}).get('version')
-        except Exception:
-            pass
+    # Shared with install_jetson_ort.py (jc.collect_cuda_version) so the two scripts can never
+    # report different CUDA versions for the same real hardware -- see that function's docstring
+    # for the fallback chain (nvcc -> version.json -> version.txt -> dpkg) and the real bug this
+    # fixes (nvcc missing from PATH on a real Jetson AGX Orin + JetPack 5.1.2 device even though
+    # CUDA 11.4.19 was genuinely installed).
+    cuda_detection = jc.collect_cuda_version()
+    nvcc_out = cuda_detection['nvcc_version_raw']
+    cuda_version_str = cuda_detection['cuda_version']
     cudnn_pkgs = jc.run(['bash', '-c', 'dpkg -l | grep -i cudnn || true'])
     tensorrt_pkgs = jc.run(['bash', '-c', "dpkg -l | grep -E 'tensorrt|libnvinfer' || true"])
     tensorrt_python_version = None
@@ -52,6 +52,7 @@ def detect_nvidia_stack():
         'l4t': l4t_family,
         'nvcc_version_raw': nvcc_out,
         'cuda_version': cuda_version_str,
+        'cuda_version_source': cuda_detection['cuda_version_source'],
         'cuda': cuda_family,
         'jetpack_family_agreement': family_agreement,
         'cudnn_packages_raw': cudnn_pkgs,

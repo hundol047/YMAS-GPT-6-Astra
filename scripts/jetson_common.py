@@ -138,6 +138,100 @@ def extract_cuda_version_from_nvcc(nvcc_output: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+def _cuda_version_from_version_json(version_json_text: str | None) -> str | None:
+    if not version_json_text:
+        return None
+    try:
+        v = json.loads(version_json_text).get('cuda', {}).get('version')
+    except Exception:
+        return None
+    if not v:
+        return None
+    m = re.search(r'(\d+)\.(\d+)', v)
+    return f'{m.group(1)}.{m.group(2)}' if m else None
+
+
+def _cuda_version_from_version_txt(version_txt_text: str | None) -> str | None:
+    # Older CUDA toolkit installs write a plain-text /usr/local/cuda/version.txt like
+    # "CUDA Version 11.4.19" -- newer ones use version.json instead (checked first).
+    if not version_txt_text:
+        return None
+    m = re.search(r'(\d+)\.(\d+)', version_txt_text)
+    return f'{m.group(1)}.{m.group(2)}' if m else None
+
+
+def _cuda_version_from_dpkg(dpkg_cuda_output: str | None) -> str | None:
+    """Parses a CUDA major.minor out of `dpkg -l` lines for CUDA runtime/toolkit packages -- e.g.
+    package names like `cuda-toolkit-11-4`/`cuda-cudart-11-4` (JetPack's own naming), or a version
+    column like `11.4.19-1` next to a `cuda*` package name. This is the last-resort source: no
+    `nvcc` on PATH and no /usr/local/cuda/version.{json,txt} still leaves a real signal on a device
+    where the CUDA runtime packages are genuinely installed (e.g. nvcc missing from a runtime-only
+    JetPack image, or simply not on this shell's PATH -- both real, observed cases, not hypothetical)."""
+    if not dpkg_cuda_output:
+        return None
+    m = re.search(r'cuda-toolkit-(\d+)-(\d+)', dpkg_cuda_output)
+    if m:
+        return f'{m.group(1)}.{m.group(2)}'
+    m = re.search(r'cuda-cudart-(\d+)-(\d+)', dpkg_cuda_output)
+    if m:
+        return f'{m.group(1)}.{m.group(2)}'
+    m = re.search(r'\bcuda\S*\s+(\d+)\.(\d+)\.\d+', dpkg_cuda_output)
+    if m:
+        return f'{m.group(1)}.{m.group(2)}'
+    return None
+
+
+def detect_cuda_version_string(*, nvcc_output: str | None = None, cuda_version_json_text: str | None = None,
+                                cuda_version_txt_text: str | None = None, dpkg_cuda_output: str | None = None) -> dict:
+    """The CUDA-version fallback chain, pure (never runs a subprocess or reads a file itself -- the
+    caller passes in whatever run()/read_file() already collected from each source, which is what
+    makes this testable without real hardware and reusable identically from both
+    detect_jetson_env.py and install_jetson_ort.py -- see collect_cuda_version() below for the
+    real-IO wrapper both of them actually call, so the two scripts can never diverge on this).
+
+    Order, stopping at the first real signal found -- NEVER guessed, null if none of the four agree:
+      1. `nvcc --version`
+      2. /usr/local/cuda/version.json
+      3. /usr/local/cuda/version.txt
+      4. `dpkg -l` CUDA runtime/toolkit package names/versions
+
+    Returns {'cuda_version': 'MAJOR.MINOR' | None, 'cuda_version_source': one of
+    'nvcc'/'version.json'/'version.txt'/'dpkg' | None}."""
+    version = extract_cuda_version_from_nvcc(nvcc_output)
+    if version:
+        return {'cuda_version': version, 'cuda_version_source': 'nvcc'}
+    version = _cuda_version_from_version_json(cuda_version_json_text)
+    if version:
+        return {'cuda_version': version, 'cuda_version_source': 'version.json'}
+    version = _cuda_version_from_version_txt(cuda_version_txt_text)
+    if version:
+        return {'cuda_version': version, 'cuda_version_source': 'version.txt'}
+    version = _cuda_version_from_dpkg(dpkg_cuda_output)
+    if version:
+        return {'cuda_version': version, 'cuda_version_source': 'dpkg'}
+    return {'cuda_version': None, 'cuda_version_source': None}
+
+
+def collect_cuda_version() -> dict:
+    """Actually gathers each raw source (nvcc subprocess, the two /usr/local/cuda/version.* files,
+    a dpkg query) and runs detect_cuda_version_string() over them. This is the SINGLE place both
+    detect_jetson_env.py and install_jetson_ort.py call for CUDA version detection -- previously
+    install_jetson_ort.py only tried `nvcc --version` with no fallback at all, which on a real
+    Jetson AGX Orin + JetPack 5.1.2 device where `nvcc` simply wasn't on this shell's PATH (CUDA
+    11.4.19 was genuinely installed) produced cuda_major/cuda_minor: null there while
+    detect_jetson_env.py (which already had a version.json fallback) correctly found 11.4 -- the
+    two scripts disagreeing on the same real hardware. Sharing this one function is what prevents
+    that class of bug from recurring."""
+    nvcc_out = run(['nvcc', '--version'])
+    version_json = read_file('/usr/local/cuda/version.json')
+    version_txt = read_file('/usr/local/cuda/version.txt')
+    dpkg_cuda = run(['bash', '-c', "dpkg -l | grep -iE 'cuda-toolkit|cuda-cudart|^ii  cuda' || true"])
+    result = detect_cuda_version_string(nvcc_output=nvcc_out, cuda_version_json_text=version_json,
+                                         cuda_version_txt_text=version_txt, dpkg_cuda_output=dpkg_cuda)
+    result['nvcc_version_raw'] = nvcc_out
+    return result
+
+
 def extract_cudnn_major(dpkg_cudnn_output: str | None) -> int | None:
     if not dpkg_cudnn_output:
         return None
@@ -283,6 +377,88 @@ def check_gpu_requirement_by_status(provider_status: dict, require_gpu: bool, re
         return False, (f'--require-gpu: CUDA status={cuda_status!r}, TensorRT status={trt_status!r}, '
                         'need EXECUTION_VERIFIED on at least one')
     return True, None
+
+
+# --- Distinguishing a native ONNX Runtime crash from an ordinary Python exception -----------------
+# Confirmed for real on a Jetson AGX Orin + JetPack 5.1.2 device: the generic PyPI ARM64 CPU
+# onnxruntime==1.19.2 wheel (installed as the JetPack5 CPU fallback) native-crashed during
+# session/inference use -- `Aborted (core dumped)`, a C++ `Assertion '__n < this->size()' failed`
+# inside libstdc++'s std::vector::operator[], not a Python exception at all. The deploy flow used
+# to run inference in-process and treat ANY resulting failure the same way ("CPU/GPU result
+# equivalence FAILED"), which is actively misleading for a crash that never got anywhere near
+# comparing two results. Everything below exists so a native crash is (a) isolated in its own
+# subprocess so it can never take the calling script down with it, and (b) reported as exactly what
+# it is, distinct from every other failure mode.
+DEPLOYMENT_FAILURE_STATUSES = (
+    'ORT_IMPORT_FAILED', 'ORT_NATIVE_RUNTIME_CRASH', 'MODEL_LOAD_FAILED', 'INFERENCE_FAILED', 'CPU_GPU_MISMATCH',
+    # Not returned by classify_ort_smoke_test itself (a hang, not a crash or exception) -- the
+    # caller (verify_jetson_agx_gpu.py's subprocess.run(..., timeout=...)) reports this one directly
+    # when the smoke-test subprocess simply never finishes, so it's never silently ignored either.
+    'ORT_SMOKE_TEST_TIMEOUT',
+)
+
+
+def classify_subprocess_termination(returncode: int) -> str:
+    """'OK' / 'PYTHON_EXCEPTION' / 'NATIVE_CRASH', from a subprocess.run() returncode alone.
+
+    On POSIX, subprocess.run's .returncode is NEGATIVE exactly when the child was killed by a
+    signal (== -signal_number -- e.g. -6 for SIGABRT/`abort()`, -11 for SIGSEGV); an ordinary
+    uncaught Python exception always exits with code 1 (positive), never a signal. This is the only
+    reliable way to tell "the program ran and raised" apart from "the process was killed out from
+    under it" using just the exit status."""
+    if returncode == 0:
+        return 'OK'
+    if returncode < 0:
+        return 'NATIVE_CRASH'
+    return 'PYTHON_EXCEPTION'
+
+
+def parse_ort_smoke_test_progress(stdout_text: str) -> list:
+    """Parses scripts/ort_smoke_test.py's stdout -- one flushed JSON object per completed stage
+    (`{"stage": "import"/"model_load"/"inference", "ok": true, ...}`) -- into a list of stage dicts.
+    A crash mid-write leaves a partial or missing trailing line; that line is silently dropped
+    (never guessed at) rather than raising, so the caller sees exactly how far it got before dying."""
+    stages = []
+    for line in (stdout_text or '').splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            stages.append(json.loads(line))
+        except Exception:
+            break
+    return stages
+
+
+def classify_ort_smoke_test(returncode: int, stdout_text: str) -> dict:
+    """The single place that turns an `scripts/ort_smoke_test.py [--full]` subprocess's raw
+    (returncode, stdout) into one of DEPLOYMENT_FAILURE_STATUSES, or 'OK'. Never reports
+    'CPU_GPU_MISMATCH' here -- that status belongs only to compare_cpu_gpu_results.py, once BOTH
+    sides of a comparison actually produced a real result; something that crashed before even
+    finishing a single import/inference never gets that label.
+
+    Returns {'status': ..., 'last_stage_completed': 'import'|'model_load'|'inference'|None,
+    'stages': [...]} -- last_stage_completed is a diagnostic aid (e.g. crashing right after 'import'
+    completed but before 'model_load' printed means the crash happened during model/session
+    construction, not the bare `import onnxruntime` itself)."""
+    stages = parse_ort_smoke_test_progress(stdout_text)
+    last_stage = stages[-1]['stage'] if stages else None
+    termination = classify_subprocess_termination(returncode)
+
+    if returncode == 0 and last_stage in ('import', 'model_load', 'inference'):
+        return {'status': 'OK', 'last_stage_completed': last_stage, 'stages': stages}
+    if termination == 'NATIVE_CRASH':
+        return {'status': 'ORT_NATIVE_RUNTIME_CRASH', 'last_stage_completed': last_stage, 'stages': stages}
+    if last_stage is None:
+        return {'status': 'ORT_IMPORT_FAILED', 'last_stage_completed': None, 'stages': stages}
+    if last_stage == 'import':
+        return {'status': 'MODEL_LOAD_FAILED', 'last_stage_completed': last_stage, 'stages': stages}
+    if last_stage == 'model_load':
+        return {'status': 'INFERENCE_FAILED', 'last_stage_completed': last_stage, 'stages': stages}
+    # Reached 'inference' in the stage list but returncode != 0 and wasn't a signal -- something
+    # went wrong after printing that marker but before a clean exit; still not a crash, still not a
+    # silent success. Treated as INFERENCE_FAILED rather than invented as anything more specific.
+    return {'status': 'INFERENCE_FAILED', 'last_stage_completed': last_stage, 'stages': stages}
 
 
 # --- Unified verification status vocabulary -------------------------------------------------------

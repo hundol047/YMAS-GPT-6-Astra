@@ -150,6 +150,42 @@ plus `nodes_executed_by_provider` (raw counts) in its JSON output. TensorRT engi
 alone, or a CUDA session merely being registered, is never reported as `EXECUTION_VERIFIED` for
 TensorRT -- and a CUDA-only fallback never satisfies a TensorRT requirement.
 
+## Native ONNX Runtime crash isolation
+
+Confirmed for real on a Jetson AGX Orin + JetPack 5.1.2 device: the generic PyPI ARM64 CPU
+`onnxruntime==1.19.2` wheel (`backend/requirements-jetpack5-ort-cpu.txt`'s CPU-fallback pin)
+native-crashed during session/inference use -- a C++ `Assertion '__n < this->size()' failed` inside
+libstdc++'s `std::vector::operator[]`, `SIGABRT`, `Aborted (core dumped)`. That is not a Python
+exception; it takes the whole process down with it, and earlier revisions of this deployment layer
+ran real inference in-process and would have reported the resulting failure as a plain
+"CPU/GPU result equivalence FAILED" -- misleading, since equivalence testing never even started.
+
+`scripts/ort_smoke_test.py` exists specifically to isolate this: run as its OWN subprocess (never
+in-process), it does `import onnxruntime` + `get_available_providers()` first (`--full` also loads
+the real SynexAgent model and runs one inference), printing one flushed JSON line per stage
+completed. `jetson_common.classify_ort_smoke_test(returncode, stdout)` turns the subprocess's raw
+termination into one of:
+
+| Status | Meaning |
+|---|---|
+| `ORT_IMPORT_FAILED` | An ordinary Python exception (e.g. `ImportError`) before any stage completed. |
+| `ORT_NATIVE_RUNTIME_CRASH` | The subprocess was killed by a signal (negative `returncode` -- e.g. `SIGABRT`) at any stage. |
+| `MODEL_LOAD_FAILED` | Import succeeded, but building the real SynexAgent session raised an ordinary exception. |
+| `INFERENCE_FAILED` | Model load succeeded, but the inference call raised an ordinary exception. |
+| `ORT_SMOKE_TEST_TIMEOUT` | The subprocess simply never finished (a hang, not a crash) -- reported by `verify_jetson_agx_gpu.py`'s own `subprocess.run(..., timeout=...)`, not by the classifier itself. |
+| `CPU_GPU_MISMATCH` | **Never produced by this classifier** -- it belongs only to `scripts/compare_cpu_gpu_results.py`, once both a CPU and a GPU result actually exist to compare. |
+
+`scripts/verify_jetson_agx_gpu.py` runs this smoke test FIRST, before it ever imports `onnxruntime`
+itself in-process; a non-`OK` result skips `onnxruntime_report()` entirely (which would otherwise
+just crash the same way) and exits with a dedicated code (3) instead. `deploy_jetson_agx.sh` checks
+for that exact exit code and stops (exit 6) BEFORE step 10's `compare_cpu_gpu_results.py` ever runs
+-- confirmed end-to-end in this development environment via a synthetic crashing `onnxruntime`
+module injected over `PYTHONPATH`: the real subprocess exit code was `-6` (`SIGABRT`), classified as
+`ORT_NATIVE_RUNTIME_CRASH`, and `runtime/cpu_gpu_comparison.json` was never created. As defense in
+depth, `compare_cpu_gpu_results.py`'s own subprocess exit code is also checked for a signal-kill
+shape (shell exit `>=128`) and reported as `ORT_NATIVE_RUNTIME_CRASH` rather than `CPU_GPU_MISMATCH`
+if it crashes there instead.
+
 ## Dependency strategy
 
 - `backend/requirements-core.txt`: everything except ONNX Runtime (FastAPI, NumPy, Pydantic,
@@ -207,6 +243,17 @@ are matched against the live-detected environment field-by-field (`l4t_major`/`c
 `cuda_minor`/`cudnn_major`/`tensorrt_major`/`tensorrt_minor`/`python_abi`/`arch` -- ALL must be
 non-null and equal); a profile missing any of those fields (like the shipped `unverified-template`)
 can never match, by construction.
+
+**CUDA version detection is a fallback chain**, not `nvcc --version` alone. Confirmed as a real bug
+on a Jetson AGX Orin + JetPack 5.1.2 device: CUDA 11.4.19 was genuinely installed, but `nvcc` wasn't
+on that shell's `PATH` -- `scripts/install_jetson_ort.py` (which only ever tried `nvcc`) reported
+`cuda_major`/`cuda_minor: null` while `scripts/detect_jetson_env.py` (which already had a
+`version.json` fallback) correctly found `11.4` on the SAME hardware. `jetson_common.collect_cuda_version()`
+is now the single shared source both scripts (plus `verify_jetson_agx_gpu.py` and
+`suggest_jetson_ort_candidate.py`) call, trying, in order and stopping at the first real signal:
+`nvcc --version` → `/usr/local/cuda/version.json` → `/usr/local/cuda/version.txt` → `dpkg -l` CUDA
+runtime/toolkit package names. Still never guessed -- if none of the four sources produce a version,
+`cuda_major`/`cuda_minor` stay `null`, exactly as before.
 
 ## Python interpreter selection
 
@@ -337,7 +384,22 @@ corrected classification/verification logic and its test coverage in
 ## Current status (as of this round, from this development environment)
 
 - Jetson hardware detected: **NO** (this environment is x86_64 cloud Linux).
-- JetPack 5.1.2 / Python 3.8 compatibility path: **code written and unit-tested** (`backend/tests/test_python38_compat.py`, 14/14 passing) -- not exercised against a real Python 3.8 interpreter, since none is available in this sandbox (confirmed: the org's package-index egress policy blocks the `python3.8` apt package's download host). Verified instead via real PyPI release metadata for every pin and a real `pip install --dry-run` resolver run against the exact target platform/ABI (cp38-manylinux2014_aarch64) -- see "Root Cause" above.
+- JetPack 5.1.2 / Python 3.8 compatibility path: **code written and unit-tested**, and this round's
+  fixes address three issues actually reported from a real Jetson AGX Orin + JetPack 5.1.2 device
+  run: (1) `ImportError: cannot import name 'Annotated' from 'typing'` (schemas.py now imports it
+  from `typing_extensions`, pinned in both requirements files), (2) a native ONNX Runtime crash
+  (`Aborted (core dumped)`) from the generic PyPI ARM64 CPU wheel during session/inference use --
+  now isolated and detected via `scripts/ort_smoke_test.py` + `classify_ort_smoke_test`, never
+  mislabeled as a CPU/GPU equivalence failure, and (3) `cuda_major`/`cuda_minor` incorrectly
+  `null` because `nvcc` wasn't on `PATH` even though CUDA 11.4.19 was installed -- now a shared
+  fallback chain (`jetson_common.collect_cuda_version`) used by every Jetson script. Confirmed via
+  real PyPI release metadata, a real `pip install --dry-run` resolver run against the exact target
+  platform/ABI (cp38-manylinux2014_aarch64), AST-based Python-3.8-grammar parsing, and real
+  subprocess-level crash-injection tests (a synthetic `onnxruntime` module that prints the real
+  smoke-test marker then calls `os.abort()`, exercised both directly and through the full
+  `deploy_jetson_agx.sh` pipeline) -- not by actually running on a Python 3.8 interpreter, since
+  none is available in this sandbox (confirmed: the org's package-index egress policy blocks the
+  `python3.8` apt package's download host).
 - GPU ONNX Runtime: no verified candidate configured (`config/jetson_ort_candidates.json` ships empty, as always) -- still requires a real wheel confirmed on the actual device, or `--ort-wheel`.
 - CUDA execution verified: **NOT YET** -- requires a real run on the AGX Orin device.
 - TensorRT execution verified: **NOT YET** -- requires a real run on the AGX Orin device.

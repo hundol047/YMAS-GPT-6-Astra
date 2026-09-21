@@ -230,6 +230,36 @@ def test_schemas_module_uses_typing_optional_not_pep604_union():
             pytest.fail(f"schemas.py:{node.lineno} uses a PEP 604 `|` union -- must use typing.Optional/Union")
 
 
+def test_schemas_module_imports_annotated_from_typing_extensions_not_typing():
+    """`typing.Annotated` was only added in Python 3.9 (PEP 593) -- `from typing import Annotated`
+    raises `ImportError: cannot import name 'Annotated' from 'typing'` on Python 3.8, confirmed for
+    real on a Jetson AGX Orin + JetPack 5.1.2 device (Python 3.8.10). typing_extensions backports it
+    identically for 3.8+, and is already a hard dependency of pydantic itself on both the PC and
+    JetPack5 requirements files, so this works unchanged on both paths."""
+    tree = ast.parse((BACKEND / "app" / "schemas.py").read_text(encoding="utf-8"))
+    imported_from = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and any(a.name == "Annotated" for a in node.names):
+            imported_from[node.module] = node.lineno
+    assert "typing_extensions" in imported_from, "schemas.py must import Annotated from typing_extensions"
+    assert "typing" not in imported_from, (
+        f"schemas.py:{imported_from.get('typing')} imports Annotated from stdlib typing -- "
+        "this raises ImportError on Python 3.8 (Annotated was added in 3.9)"
+    )
+
+
+def test_annotated_is_actually_importable_and_usable_from_typing_extensions():
+    """Confirms typing_extensions.Annotated is a real, usable drop-in for typing.Annotated on
+    whatever Python is running this test (this sandbox has no Python 3.8 interpreter available --
+    see docs/JETSON_DEPLOYMENT.md -- but typing_extensions' whole purpose is guaranteeing this same
+    behavior back to 3.8, and this at least proves the import path + subscript syntax used in
+    schemas.py works, not just that the import statement parses)."""
+    from typing_extensions import Annotated as TEAnnotated
+    Unit = TEAnnotated[float, "some metadata"]
+    assert TEAnnotated is not None
+    assert Unit.__metadata__ == ("some metadata",)
+
+
 # --- config/jetson_agx_orin_profiles.json's real AGX Orin + JetPack 5.1.2 entry -------------------
 
 def test_real_agx_orin_jetpack512_environment_is_recorded_but_not_fabricated_verified():
