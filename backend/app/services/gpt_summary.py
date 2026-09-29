@@ -110,5 +110,5 @@ def summarize_demo(patient, notes, analysis, drug_catalog, *, api_key=None, mode
         if not isinstance(summary, str) or not summary.strip() or len(summary) > 1000:
             raise ValueError("Invalid summary")
         return summary.strip()
-    except (httpx.HTTPError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, ImportError) as exc:
         raise AISummaryUnavailable("AI summary request failed") from exc
