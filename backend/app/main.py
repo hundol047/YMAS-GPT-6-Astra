@@ -32,6 +32,7 @@ from .services.clinical_summary import build_summary
 from .services.results import unified_results
 from .services.vitals import assess as assess_vitals
 from .services.demo_seed import seed_demo_clinical_data
+from .services.gpt_summary import summarize_demo, AISummaryUnavailable
 from .services.idempotency import IdempotencyStore, IdempotencyConflict, IdempotencyTimeout
 from fastapi import Depends, Cookie, Header
 from fastapi.responses import RedirectResponse
@@ -154,6 +155,23 @@ def patient(pid):
     if p is None:raise HTTPException(404,'Patient not found')
     return p
 
+def enrich_demo_with_ai(patient_record, result):
+    """Add an optional GPT summary only for bundled demo data; retain rule/model output."""
+    if not isinstance(app.state.adapter, DemoAdapter) or not os.getenv('OPENAI_API_KEY'):
+        return result
+    try:
+        notes=app.state.note_repo.list_for_patient(patient_record.id)
+        summary=summarize_demo(patient_record,notes,result,DRUGS)
+        result['summary']='의료 AI 요약 · '+summary
+        result['agent_mode']='openai_demo_summary'
+        result['ai_summary_status']='available'
+    except AISummaryUnavailable:
+        result['ai_summary_status']='unavailable'
+        result['summary']='의료 AI 연결 실패 · '+result['summary']
+        log.warning('Optional demo AI summary unavailable; keeping rule-based summary')
+    return result
+
+
 def save_analysis(result,event='analysis_completed'):
     audit=app.state.audit
     audit.save_analysis(result)
@@ -227,7 +245,7 @@ def check(p:Patient,user:User=Depends(require('analysis:read'))):return app.stat
 def analyze(req:PatientRequest,user:User=Depends(require('analysis:read'))):
     p=patient(req.patient_id)
     app.state.audit.record(p.id,'analysis_started',{})
-    result=app.state.agent.run(p);save_analysis(result);return result
+    result=enrich_demo_with_ai(p,app.state.agent.run(p));save_analysis(result);return result
 
 @app.get('/agent/stream/{pid}')
 def stream(pid:str,user:User=Depends(require('analysis:read'))):
@@ -236,7 +254,7 @@ def stream(pid:str,user:User=Depends(require('analysis:read'))):
         try:
             app.state.audit.record(pid,'analysis_started',{})
             # Progress is a replay of measured completed stages, never fabricated checks.
-            result=app.state.agent.run(p)
+            result=enrich_demo_with_ai(p,app.state.agent.run(p))
             save_analysis(result)
             for step in result['steps']:
                 yield 'event: step\ndata: '+json.dumps(step,ensure_ascii=False)+'\n\n'
