@@ -78,6 +78,27 @@ http://127.0.0.1:5173 에서 실행합니다. `/api` 요청은 Vite가 8000의 F
 외부 API 요청에는 환자 이름·MRN·연락처를 제외한 데모 기록 일부가 포함되며,
 인터넷 연결이 필요합니다. 모델의 문장은 기존 규칙 경고나 실제 처방을 수정하지 않습니다.
 
+먼저 PC에서 위의 Windows 또는 macOS/Linux 설치 절차를 따라 실행해 보십시오.
+완성된 `frontend/dist`가 포함되어 있으므로 화면을 수정하지 않는다면 `npm` 빌드 없이
+Python 의존성 설치 후 서버를 시작할 수 있습니다. 서버를 시작하는 **같은 터미널**에서
+키를 설정합니다.
+
+```powershell
+# Windows PowerShell
+$env:OPENAI_API_KEY = '발급받은_API_키'
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+```bash
+# macOS / Linux
+export OPENAI_API_KEY='발급받은_API_키'
+.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+브라우저에서 `http://127.0.0.1:8000`을 열고 `SYN-002` 환자를 선택한 뒤
+**Agent 임상 요약**에 `의료 AI 요약 ·` 문구가 나타나는지 확인하십시오.
+`의료 AI 연결 실패 ·`가 나타나면 키·인터넷 연결·API 사용 가능 상태를 점검하십시오.
+
 ## 포함 기능
 
 - 검색 가능한 5명 가상 환자와 환자별 실제 ONNX 점수
